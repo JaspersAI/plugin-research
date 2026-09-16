@@ -13,6 +13,7 @@
       "node"
     ],
     "strict": true,
+    "noUncheckedSideEffectImports": false,
     "noEmit": true,
     "allowImportingTsExtensions": true,
     "isolatedModules": true,

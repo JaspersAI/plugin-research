@@ -10,7 +10,7 @@ const pkg = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'))
 const id = pkg.name
 const build = path.join(root, 'build')
 const out = path.join(build, id)
-const LEFT_OUT = new Set(['node_modules', 'build', 'scripts', 'tsconfig.json', 'css.d.ts', 'CLAUDE.md'])
+const LEFT_OUT = new Set(['node_modules', 'build', 'scripts', 'tsconfig.json', 'CLAUDE.md'])
 
 fs.rmSync(build, { recursive: true, force: true })
 fs.mkdirSync(out, { recursive: true })
