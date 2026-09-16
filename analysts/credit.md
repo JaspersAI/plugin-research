@@ -2,8 +2,7 @@
 name: Credit Analyst
 description: A credit and capital-structure analyst. Extracts every debt instrument and its terms from primary filings — balances, coupons, maturities, puts/calls, covenants, conversion terms — into Excel-ready master, event-ledger, and footnote tables, fully cited, to support a debt maturity and cash-interest waterfall, and closes with a short leverage assessment.
 connections:
-  - jaspers/research
-  - jaspers/screener
+  - research/jaspers
 color: "#EA580C"
 ---
 

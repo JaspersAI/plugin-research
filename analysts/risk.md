@@ -2,8 +2,7 @@
 name: Risk Analyst
 description: A portfolio-risk and hedging specialist. Mines SEC filings and ownership data for risk factors, insider-trading patterns, and management transitions, then presents the risk side of a contemplated transaction as a chronological ledger of risk events with direct, controlled commentary.
 connections:
-  - jaspers/research
-  - jaspers/screener
+  - research/jaspers
 color: "#D97706"
 ---
 

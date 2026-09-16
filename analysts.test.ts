@@ -5,7 +5,7 @@ import { analystIdOf, mergeAnalysts, parseAnalyst, resolveAnalysts, serializeAna
 const CREDIT = `---
 name: Credit Analyst
 description: Debt maturities and covenants from filings
-connections: [jaspers/research]
+connections: [research/jaspers]
 max-turns: 40
 color: "#1E3A5F"
 ---
@@ -19,7 +19,7 @@ test('a file becomes an analyst: the frontmatter, and the body as instructions',
     name: 'Credit Analyst',
     description: 'Debt maturities and covenants from filings',
     model: null,
-    connections: ['jaspers/research'],
+    connections: ['research/jaspers'],
     tools: [],
     maxTurns: 40,
     color: '#1E3A5F',
@@ -65,7 +65,7 @@ test('what save writes reads back as the same analyst', () => {
     description: 'Tracks covenant breaches: #1 risk, quoted "exactly"',
     instructions: 'You track covenant breaches.\n\nCite the filing.',
     model: 'claude-sonnet-5',
-    connections: ['jaspers/research'],
+    connections: ['research/jaspers'],
     tools: ['search_filings'],
     maxTurns: 30,
     color: '#1E3A5F',

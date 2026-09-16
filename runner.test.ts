@@ -4,7 +4,7 @@ import { parseAnalyst } from './analysts.ts'
 import type { AnalystMessage } from './room.ts'
 import { runAnalyst, type Completion, type RunIo, type RunnerContext, type Turn } from './runner.ts'
 
-const ANALYST = parseAnalyst('credit', '---\nname: Credit Analyst\nconnections: [jaspers/research]\nmax-turns: 5\n---\nExtract debt.', 'preset')
+const ANALYST = parseAnalyst('credit', '---\nname: Credit Analyst\nconnections: [research/jaspers]\nmax-turns: 5\n---\nExtract debt.', 'preset')
 
 function message(): AnalystMessage {
   return {
@@ -48,10 +48,10 @@ function world(script: (turns: Turn[], round: number) => Completion | Promise<Co
     },
     tools: {
       list: async () => [
-        { id: 'jaspers/research/search_filings', connection: 'jaspers/research', name: 'search_filings', description: 'Search', parameters: { type: 'object' } },
-        { id: 'jaspers/research/fetch_chunk', connection: 'jaspers/research', name: 'fetch_chunk', description: 'Fetch', parameters: { type: 'object' } },
+        { id: 'research/jaspers/search_filings', connection: 'research/jaspers', name: 'search_filings', description: 'Search', parameters: { type: 'object' } },
+        { id: 'research/jaspers/fetch_chunk', connection: 'research/jaspers', name: 'fetch_chunk', description: 'Fetch', parameters: { type: 'object' } },
         { id: 'other/search_filings', connection: 'other', name: 'search_filings', description: 'Elsewhere', parameters: { type: 'object' } },
-        { id: 'jaspers/research/show_citations', connection: 'jaspers/research', name: 'show_citations', description: 'Verify', parameters: { type: 'object' } },
+        { id: 'research/jaspers/show_citations', connection: 'research/jaspers', name: 'show_citations', description: 'Verify', parameters: { type: 'object' } },
       ],
       call: async (id, args, opts) => {
         calls.push(id)
@@ -80,7 +80,7 @@ const job = { analyst: ANALYST, system: 'system', firstTurn: 'New message for yo
 
 test('a tool round then an answer: text, steps where the calls were made, saved results, usage', async () => {
   const w = world((_turns, round) => (round === 1 ? reply('Checking the 10-K.', [['search_filings', { query: 'debt' }]]) : reply('The revolver matures in June.')), {
-    'jaspers/research/search_filings': async () => ({ text: '[{"a":1},{"a":2}]', isError: false }),
+    'research/jaspers/search_filings': async () => ({ text: '[{"a":1},{"a":2}]', isError: false }),
   })
   const done = await runAnalyst(w.ctx, { ...job, message: message() }, w.io, new AbortController().signal)
   assert.equal(done.status, 'done')
@@ -107,7 +107,7 @@ test('tools the analyst is not limited away from are named plainly; a clash is n
   }
   const limited = parseAnalyst('credit', '---\nname: Credit Analyst\ntools: [search_filings]\n---\nX', 'preset')
   await runAnalyst(w.ctx, { ...job, analyst: limited, message: message() }, w.io, new AbortController().signal)
-  assert.deepEqual(offered, ['jaspers__research__search_filings', 'other__search_filings', 'fetch_result'])
+  assert.deepEqual(offered, ['research__jaspers__search_filings', 'other__search_filings', 'fetch_result'])
   await runAnalyst(w.ctx, { ...job, message: message() }, w.io, new AbortController().signal)
   assert.deepEqual(offered, ['search_filings', 'fetch_chunk', 'fetch_result'])
 })
@@ -164,9 +164,9 @@ test('calls in one round run together, and a failing tool goes back to the model
   }
   const w = world(
     (_turns, round) => (round === 1 ? reply('', [['fetch_chunk', { id: 1 }], ['fetch_chunk', { id: 2 }], ['search_filings', {}]]) : reply('Done.')),
-    { 'jaspers/research/fetch_chunk': slow },
+    { 'research/jaspers/fetch_chunk': slow },
   )
-  const done = await runAnalyst(w.ctx, { ...job, analyst: parseAnalyst('credit', '---\nname: Credit Analyst\nconnections: [jaspers/research]\n---\nX', 'preset'), message: message() }, w.io, new AbortController().signal)
+  const done = await runAnalyst(w.ctx, { ...job, analyst: parseAnalyst('credit', '---\nname: Credit Analyst\nconnections: [research/jaspers]\n---\nX', 'preset'), message: message() }, w.io, new AbortController().signal)
   assert.equal(most, 2)
   const toolTurn = w.seen[1]![2]!
   assert.equal(toolTurn.role === 'tool' && toolTurn.results[2]!.isError, true)
@@ -174,7 +174,7 @@ test('calls in one round run together, and a failing tool goes back to the model
 })
 
 test('at the turn cap the answer ends done, saying so', async () => {
-  const w = world(() => reply('Still looking.', [['search_filings', {}]]), { 'jaspers/research/search_filings': async () => ({ text: 'x', isError: false }) })
+  const w = world(() => reply('Still looking.', [['search_filings', {}]]), { 'research/jaspers/search_filings': async () => ({ text: 'x', isError: false }) })
   const done = await runAnalyst(w.ctx, { ...job, message: message() }, w.io, new AbortController().signal)
   assert.equal(done.status, 'done')
   assert.equal(done.turns, 5)
@@ -186,7 +186,7 @@ test('an abort mid-run keeps the text so far and ends stopped with the reason', 
   const w = world(
     (_turns, round) => (round === 1 ? reply('Pulling the debt footnote.', [['search_filings', {}]]) : reply('never')),
     {
-      'jaspers/research/search_filings': (_args, signal) =>
+      'research/jaspers/search_filings': (_args, signal) =>
         new Promise((_resolve, reject) => {
           signal?.addEventListener('abort', () => reject(signal.reason))
           setTimeout(() => controller.abort(new Error('plugin reloaded')), 5)
@@ -202,7 +202,7 @@ test('an abort mid-run keeps the text so far and ends stopped with the reason', 
 
 test('room news that lands between rounds is in front of the model at its next call', async () => {
   const w = world((_turns, round) => (round === 1 ? reply('Checking the 10-K.', [['search_filings', {}]]) : reply('The revolver matures in June.')), {
-    'jaspers/research/search_filings': async () => ({ text: 'x', isError: false }),
+    'research/jaspers/search_filings': async () => ({ text: 'x', isError: false }),
   })
   const update = 'Room update: these came in while you were working. You are still answering #1.\n\n#3 [Risk Analyst]: Revolver due 2027.'
   const updates = [null, update]
@@ -228,7 +228,7 @@ test('fetch_result reads a saved result back in pieces', async () => {
   const w = world(
     (_turns, round) =>
       round === 1 ? reply('', [['search_filings', {}]]) : round === 2 ? reply('', [['fetch_result', { ref: 'r1', offset: 20_000 }]]) : reply('Read it.'),
-    { 'jaspers/research/search_filings': async () => ({ text: long, isError: false }) },
+    { 'research/jaspers/search_filings': async () => ({ text: long, isError: false }) },
   )
   await runAnalyst(w.ctx, { ...job, message: message() }, w.io, new AbortController().signal)
   const third = w.seen[2]!.at(-1)!
@@ -287,7 +287,7 @@ test('citations are verified by the server, a bad quote sends the draft back onc
       assert.equal(last?.role === 'user' && last.text.includes('quote could not be found'), true)
       return reply(REPAIRED_DRAFT)
     },
-    { 'jaspers/research/search_filings': async () => ({ text: SOURCE, isError: false }), 'jaspers/research/show_citations': showCitations(served) },
+    { 'research/jaspers/search_filings': async () => ({ text: SOURCE, isError: false }), 'research/jaspers/show_citations': showCitations(served) },
   )
   const done = await runAnalyst(w.ctx, { ...job, message: message() }, w.io, new AbortController().signal)
   assert.equal(done.status, 'done')
@@ -318,7 +318,7 @@ test('an uncited factual sentence sends the draft back even when every quote ver
       assert.equal(last?.role === 'user' && last.text.includes('1. "A $150.0 million term loan is due in 2029."'), true)
       return reply(REPAIRED_DRAFT)
     },
-    { 'jaspers/research/show_citations': showCitations(served) },
+    { 'research/jaspers/show_citations': showCitations(served) },
   )
   const done = await runAnalyst(w.ctx, { ...job, message: message() }, w.io, new AbortController().signal)
   assert.equal(done.text, REPAIRED_DRAFT)
@@ -333,7 +333,7 @@ test('a repair that re-reads a source keeps its step with the answer, and a repa
       if (round === 2) return reply('Re-reading.', [['fetch_chunk', { id: 1020 }]])
       return reply(REPAIRED_DRAFT)
     },
-    { 'jaspers/research/fetch_chunk': async () => ({ text: SOURCE, isError: false }), 'jaspers/research/show_citations': showCitations(served) },
+    { 'research/jaspers/fetch_chunk': async () => ({ text: SOURCE, isError: false }), 'research/jaspers/show_citations': showCitations(served) },
   )
   const done = await runAnalyst(w.ctx, { ...job, message: message() }, w.io, new AbortController().signal)
   assert.equal(done.text, REPAIRED_DRAFT)
@@ -344,7 +344,7 @@ test('a repair that re-reads a source keeps its step with the answer, and a repa
       if (round === 1) return reply(CITED_DRAFT)
       throw new Error('Anthropic returned 529: overloaded')
     },
-    { 'jaspers/research/show_citations': showCitations([]) },
+    { 'research/jaspers/show_citations': showCitations([]) },
   )
   const kept = await runAnalyst(failing.ctx, { ...job, message: message() }, failing.io, new AbortController().signal)
   assert.equal(kept.status, 'done')
@@ -360,7 +360,7 @@ test('with no citation server on the connection, citations are numbered but unch
   assert.deepEqual(done.citations.map((c) => [c.n, c.verified, c.url]), [[1, null, null], [2, null, null]])
   assert.deepEqual(done.audit, { uncited: 0, unverified: 0, repaired: false })
 
-  const capped = world(() => reply('Uncited figure: $1.', [['search_filings', {}]]), { 'jaspers/research/search_filings': async () => ({ text: 'x', isError: false }) })
+  const capped = world(() => reply('Uncited figure: $1.', [['search_filings', {}]]), { 'research/jaspers/search_filings': async () => ({ text: 'x', isError: false }) })
   const atCap = await runAnalyst(capped.ctx, { ...job, message: message() }, capped.io, new AbortController().signal)
   assert.equal(atCap.turns, 5)
   assert.deepEqual(atCap.audit, { uncited: 1, unverified: 0, repaired: false })
@@ -377,7 +377,7 @@ test("read_workspace reads a view's text a part at a time, and a quote from it v
       if (round === 2) return reply('', [['read_workspace', { path: 'panels/e1/text', offset: 20000 }]])
       return reply('<cite panel="e1" quote="We now expect capital expenditures to increase sequentially">Microsoft expects capex to keep rising.</cite>')
     },
-    { 'jaspers/research/show_citations': showCitations(served) },
+    { 'research/jaspers/show_citations': showCitations(served) },
   )
   w.ctx.state.get = async (path) => {
     asked.push(path)

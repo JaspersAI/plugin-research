@@ -1,4 +1,4 @@
-import { definePlugin, defineSource, defineView } from '@jaspers-ai/sdk'
+import { defineConnection, definePlugin, defineSource, defineView } from '@jaspers-ai/sdk'
 import { z } from 'zod'
 import { loadAnalysts, publishAnalysts, saveAnalyst } from './analyst-files'
 import { summaryOf, type AnalystInput } from './analysts'
@@ -8,8 +8,8 @@ import { roomSummary, type RoomOutput } from './room'
 import { checkRoomHere, claimRooms, createRoom, listRooms, markInterrupted, openRoom, post, readThread, stop, updateRoom } from './rooms'
 import { RoomView } from './RoomView'
 
-// Research rooms: a thread and a roster of analysts who research in parallel over the Jaspers SEC
-// MCP, reading what the other views on the user's workspace show. The user talks to a room through
+// Research rooms: a thread and a roster of analysts who research in parallel over the Jaspers research
+// MCP (its own connection, research/jaspers, with its own Jaspers API key), reading what the other views on the user's workspace show. The user talks to a room through
 // the orchestrator, whose tools are these sources; the analysts run as jobs in this plugin's host,
 // and the room view renders the thread from live values.
 
@@ -157,6 +157,27 @@ const Start = z.object({
 
 export default definePlugin({
   id: 'research',
+  secrets: { token: { label: 'Jaspers API key' } },
+  connections: {
+    jaspers: defineConnection({
+      url: 'https://analyst-api.jsprai.com/mcp/open',
+      auth: 'bearer',
+      headers: { Authorization: 'Bearer ${secret:token}' },
+      tools: [
+        'search_filings',
+        'keyword_search_filings',
+        'fetch_filings',
+        'fetch_chunk',
+        'query_filings',
+        'aggregate_filings',
+        'get_distinct_values',
+        'count_filings',
+        'get_company_status',
+        'get_guide',
+        'show_citations',
+      ],
+    }),
+  },
   capabilities: ['llm', 'tools', 'files', 'state'],
   async start(ctx) {
     await markInterrupted(ctx)

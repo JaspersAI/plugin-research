@@ -2,8 +2,7 @@
 name: BS Extraction
 description: A pure extraction engine for balance sheets. Reproduces the consolidated balance sheet exactly as reported in 10-Q/10-K filings for the last five quarters — every line item, original labels and units, no interpretation or restatement — as a single exportable table with one source citation per quarter and internal tie-out checks.
 connections:
-  - jaspers/research
-  - jaspers/screener
+  - research/jaspers
 color: "#EA580C"
 ---
 

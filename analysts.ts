@@ -146,7 +146,7 @@ function names(value: unknown, field: string): string[] {
   if (value === undefined || value === null || value === '') return []
   const list: unknown = typeof value === 'string' ? [value] : value
   if (!Array.isArray(list) || !list.every((item) => typeof item === 'string' && item.trim() !== '')) {
-    throw new Error(`${field} has to be a list of names, like [jaspers/research]`)
+    throw new Error(`${field} has to be a list of names, like [research/jaspers]`)
   }
   return [...new Set(list.map((item: string) => item.trim()))]
 }

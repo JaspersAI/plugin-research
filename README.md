@@ -16,11 +16,13 @@ and press Install. The app downloads the latest release, shows where it came fro
 
 ## Keys
 
-None.
+- **Jaspers API key**, from your Jaspers account.
+
+The app asks for it the first time an analyst needs it, or take it in Settings > Plugins. It is sealed in your OS keychain and never reaches the plugin or the assistant.
 
 ## Needs
 
-Install [`plugin-jaspers`](https://github.com/JaspersAI/plugin-jaspers) too, version 2.0.0 or later: this plugin's analysts research over its `jaspers/research` and `jaspers/screener` connections.
+Nothing else.
 
 ## Develop
 

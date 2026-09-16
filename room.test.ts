@@ -145,7 +145,7 @@ test('a step sits where the text was when the call was made, and a result says w
   assert.equal(resultSummary('[{"a":1},{"a":2}]', false), '2 results')
   assert.equal(resultSummary('{"results":[1,2,3]}', false), '3 results')
   assert.equal(resultSummary('plain text answer', false), '17 characters')
-  assert.equal(resultSummary('connection_unavailable: jaspers/research is needs-secret\nmore', true), 'Error: connection_unavailable: jaspers/research is needs-secret')
+  assert.equal(resultSummary('connection_unavailable: research/jaspers is needs-secret\nmore', true), 'Error: connection_unavailable: research/jaspers is needs-secret')
 })
 
 test('eviction stubs the oldest large results and keeps the newest and the small ones', () => {
