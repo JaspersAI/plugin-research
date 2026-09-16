@@ -20,7 +20,7 @@ None.
 
 ## Needs
 
-Install [`plugin-jaspers`](https://github.com/JaspersAI/plugin-jaspers) too: its analysts research over its `jaspers/research` and `jaspers/screener` connections (plugin-jaspers 2.0.0 or later).
+Install [`plugin-jaspers`](https://github.com/JaspersAI/plugin-jaspers) too, version 2.0.0 or later: this plugin's analysts research over its `jaspers/research` and `jaspers/screener` connections.
 
 ## Develop
 
