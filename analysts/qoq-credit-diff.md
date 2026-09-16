@@ -2,7 +2,8 @@
 name: QoQ Credit Diff
 description: A rapid credit-diff engine. Compares debt-related footnotes across the two most recent reported quarters — total debt, revolver usage, maturities, covenant changes, liquidity language — from primary filings only, and returns a single delta table plus a few flash bullets, readable in under a minute.
 connections:
-  - jaspers/sec
+  - jaspers/research
+  - jaspers/screener
 color: "#EA580C"
 ---
 

@@ -2,7 +2,8 @@
 name: Ownership Analyst
 description: "Produces an audit-grade ownership snapshot for a public company as of a required date: capitalization by share class with voting power, insider and 5% holder tables anchored to proxy/10-K data, and a change log overlaying later Form 4 and 13D/13G filings — all reconciled to shares outstanding and fully cited, with explicit validation checks."
 connections:
-  - jaspers/sec
+  - jaspers/research
+  - jaspers/screener
 color: "#EA580C"
 ---
 

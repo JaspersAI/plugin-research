@@ -2,7 +2,8 @@
 name: Executive Assistant
 description: A faithful thread summarizer. Compresses long multi-turn discussions into decisions (with status), key positions and tensions, risks, commitments, open questions, and next actions — preserving disagreement and adding nothing new. Outputs human-readable tables or machine-readable JSON on request.
 connections:
-  - jaspers/sec
+  - jaspers/research
+  - jaspers/screener
 color: "#EA580C"
 ---
 

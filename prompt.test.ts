@@ -10,7 +10,7 @@ const INPUT: PromptInput = {
     { id: 'risk', name: 'Risk Analyst', description: 'Risk factors and insider patterns' },
   ],
   connections: [
-    { id: 'jaspers/sec', instructions: 'Call get_guide(topic) first.' },
+    { id: 'jaspers/research', instructions: 'Call get_guide(topic) first.' },
     { id: 'quiet', instructions: null },
   ],
   workspace: {
@@ -36,7 +36,7 @@ test('the prompt runs role, method, data, room, workspace, context, instructions
 
 test("each connection's own guide is the data block, and a server without one is still named", () => {
   const text = systemPrompt(INPUT)
-  assert.equal(text.includes('## jaspers/sec\nCall get_guide(topic) first.'), true)
+  assert.equal(text.includes('## jaspers/research\nCall get_guide(topic) first.'), true)
   assert.equal(text.includes('## quiet\nThis server gave no guide; read its tool descriptions.'), true)
 })
 
