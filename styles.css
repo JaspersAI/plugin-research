@@ -1,0 +1,440 @@
+/* The research room's own CSS. A plugin view is an iframe of its own, so there is no Tailwind here:
+   the house style by hand. Square everything, one grey line (#e5e5e5), muted text at #737373. */
+
+.rs-root {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  width: 100%;
+  background: #fff;
+  color: #171717;
+  font: 13px/1.45 system-ui, -apple-system, sans-serif;
+}
+
+.rs-bar {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 32px;
+  padding: 6px 10px;
+  border-bottom: 1px solid #e5e5e5;
+}
+
+.rs-title {
+  font-weight: 600;
+}
+
+.rs-muted {
+  color: #737373;
+}
+
+.rs-list {
+  flex: 1 1 auto;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  overflow-y: auto;
+}
+
+.rs-analyst {
+  display: flex;
+  gap: 10px;
+  padding: 8px 10px;
+  border-bottom: 1px solid #e5e5e5;
+}
+
+.rs-swatch {
+  flex: 0 0 auto;
+  width: 12px;
+  height: 12px;
+  margin-top: 4px;
+}
+
+.rs-body {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.rs-line {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.rs-name {
+  font-weight: 500;
+}
+
+.rs-description {
+  margin-top: 2px;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.rs-error {
+  margin-top: 2px;
+  color: #b91c1c;
+}
+
+/* Rooms and the thread. */
+
+.rs-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.rs-pad {
+  margin: 0;
+  padding: 8px 10px;
+}
+
+.rs-section {
+  padding: 10px 10px 4px;
+  font-weight: 600;
+  border-bottom: 1px solid #e5e5e5;
+}
+
+.rs-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 8px 10px;
+  border-bottom: 1px solid #e5e5e5;
+}
+
+.rs-clamp {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.rs-bar {
+  flex-wrap: wrap;
+}
+
+.rs-btn {
+  border: 1px solid #e5e5e5;
+  background: #fff;
+  color: #171717;
+  padding: 2px 8px;
+  cursor: pointer;
+}
+
+.rs-btn:hover {
+  border-color: #a3a3a3;
+}
+
+.rs-link {
+  border: 0;
+  background: none;
+  padding: 0;
+  color: #737373;
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+.rs-tag {
+  border: 1px solid #e5e5e5;
+  padding: 0 6px;
+  color: #525252;
+}
+
+.rs-roster {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-left: auto;
+}
+
+.rs-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border: 1px solid #e5e5e5;
+  padding: 1px 2px 1px 6px;
+}
+
+.rs-chip .rs-swatch {
+  width: 8px;
+  height: 8px;
+  margin: 0;
+}
+
+.rs-x {
+  border: 0;
+  background: none;
+  color: #a3a3a3;
+  cursor: pointer;
+  padding: 0 4px;
+}
+
+.rs-x:hover {
+  color: #171717;
+}
+
+.rs-thread {
+  padding-bottom: 12px;
+}
+
+.rs-msg {
+  padding: 10px 12px;
+  border-bottom: 1px solid #e5e5e5;
+}
+
+.rs-you {
+  background: #fafafa;
+}
+
+.rs-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.rs-meta .rs-swatch {
+  margin: 0;
+}
+
+.rs-plain {
+  white-space: pre-wrap;
+}
+
+/* An answer's copy icon, under its text and above its sources. The negative margin lines the glyph up with the text. */
+.rs-copy {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  margin: 6px 0 -4px -5px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: #737373;
+  cursor: pointer;
+}
+
+.rs-copy:hover {
+  background: #f5f5f5;
+  color: #171717;
+}
+
+.rs-steps {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 6px 0;
+}
+
+.rs-step {
+  border: 1px solid #e5e5e5;
+  padding: 2px 6px;
+  font-size: 12px;
+}
+
+.rs-step summary {
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.rs-step pre {
+  margin: 4px 0 2px;
+  white-space: pre-wrap;
+  word-break: break-all;
+  color: #525252;
+}
+
+.rs-step-error summary code {
+  color: #b91c1c;
+}
+
+.rs-files {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.rs-file {
+  border: 1px solid #e5e5e5;
+  background: #fff;
+  padding: 2px 8px;
+  cursor: pointer;
+}
+
+/* Markdown. */
+
+.rs-md p {
+  margin: 0 0 8px;
+}
+
+.rs-md ul,
+.rs-md ol {
+  margin: 0 0 8px;
+  padding-left: 20px;
+}
+
+.rs-md code {
+  font: 12px ui-monospace, SFMono-Regular, Menlo, monospace;
+  background: #f5f5f5;
+  padding: 0 3px;
+}
+
+.rs-md pre {
+  margin: 0 0 8px;
+  padding: 8px;
+  background: #f5f5f5;
+  overflow-x: auto;
+}
+
+.rs-md pre code {
+  padding: 0;
+}
+
+.rs-md blockquote {
+  margin: 0 0 8px;
+  padding-left: 10px;
+  border-left: 2px solid #e5e5e5;
+  color: #525252;
+}
+
+.rs-md hr {
+  border: 0;
+  border-top: 1px solid #e5e5e5;
+  margin: 10px 0;
+}
+
+.rs-md a {
+  color: #1d4ed8;
+}
+
+.rs-h {
+  font-weight: 600;
+  margin: 10px 0 6px;
+}
+
+.rs-h1 {
+  font-size: 17px;
+}
+
+.rs-h2 {
+  font-size: 15px;
+}
+
+.rs-h3,
+.rs-h4 {
+  font-size: 13px;
+}
+
+.rs-table {
+  overflow-x: auto;
+  margin: 0 0 8px;
+}
+
+.rs-table table {
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.rs-table th,
+.rs-table td {
+  border: 1px solid #e5e5e5;
+  padding: 3px 6px;
+  vertical-align: top;
+}
+
+.rs-table th {
+  background: #fafafa;
+  font-weight: 600;
+}
+
+/* Citations: the marker after a sourced sentence, and the sources under the answer. */
+
+.rs-cite {
+  font: 600 10.5px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+  margin-left: 2px;
+  vertical-align: super;
+  color: #737373;
+}
+
+.rs-cite a {
+  color: #1d4ed8;
+  text-decoration: none;
+  padding: 0 1px;
+}
+
+.rs-cite a:hover {
+  text-decoration: underline;
+}
+
+.rs-cite-bad a {
+  color: #b45309;
+}
+
+.rs-sources {
+  margin-top: 10px;
+  padding-top: 6px;
+  border-top: 1px solid #e5e5e5;
+  font-size: 12px;
+}
+
+.rs-sources-head {
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.rs-sources[open] .rs-sources-head {
+  margin-bottom: 4px;
+}
+
+.rs-sources-head .rs-muted {
+  font-weight: 400;
+}
+
+.rs-source {
+  display: grid;
+  grid-template-columns: 28px 1fr;
+  gap: 4px;
+  padding: 2px 0;
+}
+
+.rs-source .rs-cite {
+  vertical-align: baseline;
+  margin: 0;
+}
+
+.rs-source-body {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 8px;
+  min-width: 0;
+}
+
+.rs-source-title {
+  color: #171717;
+}
+
+.rs-source-quote {
+  color: #525252;
+  font-style: italic;
+}
+
+.rs-source-state {
+  color: #737373;
+}
+
+.rs-source-state.ok {
+  color: #15803d;
+}
+
+.rs-source-state.bad {
+  color: #b91c1c;
+}
