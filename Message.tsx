@@ -49,7 +49,7 @@ export function MessageRow({ room, seq, names, colors, onLink, onFile, onCopy }:
   return (
     <div className="rs-msg">
       <div className="rs-meta">
-        <span className="rs-swatch" style={{ background: message.color ?? colors[message.analyst] ?? '#737373' }} aria-hidden />
+        <span className="rs-swatch" style={{ background: message.color ?? colors[message.analyst] ?? 'var(--jaspers-muted-foreground, #737373)' }} aria-hidden />
         <span className="rs-name">{message.name}</span>
         <span className={message.status === 'error' ? 'rs-error' : 'rs-muted'}>{statusText(message)}</span>
       </div>

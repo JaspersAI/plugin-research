@@ -158,7 +158,7 @@ function Picker({
         <div className="rs-section">Analysts</div>
         {analysts.map((analyst) => (
           <div key={analyst.id} className="rs-row">
-            <span className="rs-swatch" style={{ background: analyst.color ?? '#737373' }} aria-hidden />
+            <span className="rs-swatch" style={{ background: analyst.color ?? 'var(--jaspers-muted-foreground, #737373)' }} aria-hidden />
             <div className="rs-body">
               <div className="rs-line">
                 <span className="rs-name">{analyst.name}</span>
@@ -261,7 +261,7 @@ function Thread({
         <span className="rs-roster">
           {output?.analysts.map((analyst) => (
             <span key={analyst.id} className="rs-chip">
-              <span className="rs-swatch" style={{ background: colors[analyst.id] ?? '#737373' }} aria-hidden />
+              <span className="rs-swatch" style={{ background: colors[analyst.id] ?? 'var(--jaspers-muted-foreground, #737373)' }} aria-hidden />
               {analyst.name}
               {analyst.status !== 'idle' && <span className="rs-muted"> {analyst.status}</span>}
               <button

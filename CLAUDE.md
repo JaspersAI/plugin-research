@@ -11,7 +11,7 @@ Node 24.
 - `npm test` — Node's test runner over the `*.test.ts` files, which strips the types itself
 - `npm run package` — `build/research-<version>.zip`, what a release attaches; the Release workflow runs it on a `v*` tag
 
-Style: square, no rounded corners; `#e5e5e5` borders, `#737373` muted.
+Style: square, no rounded corners. Colours are the app's theme variables with the light value as fallback (`var(--jaspers-border, #e5e5e5)`, `var(--jaspers-muted-foreground, #737373)`), so a view follows the app's light and dark; a colour of the plugin's own gets its dark value under `@media (prefers-color-scheme: dark)`.
 
 ## The plugin
 

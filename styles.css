@@ -1,14 +1,17 @@
 /* The research room's own CSS. A plugin view is an iframe of its own, so there is no Tailwind here:
-   the house style by hand. Square everything, one grey line (#e5e5e5), muted text at #737373. */
+   the house style by hand. Colours are the app's theme variables, so the view follows its light and
+   dark, each with its light value as the fallback for an app from before the theme. The two of the
+   room's own, links and the marker of a quote not found, get their dark values at the end. Square
+   everything, one grey line, muted secondary text. */
 
 .rs-root {
   display: flex;
   flex-direction: column;
   height: 100%;
   width: 100%;
-  background: #fff;
-  color: #171717;
-  font: 13px/1.45 system-ui, -apple-system, sans-serif;
+  background: var(--jaspers-background, #fff);
+  color: var(--jaspers-foreground, #171717);
+  font: 13px/1.45 var(--jaspers-font-sans, system-ui, -apple-system, sans-serif);
 }
 
 .rs-bar {
@@ -18,7 +21,7 @@
   gap: 8px;
   min-height: 32px;
   padding: 6px 10px;
-  border-bottom: 1px solid #e5e5e5;
+  border-bottom: 1px solid var(--jaspers-border, #e5e5e5);
 }
 
 .rs-title {
@@ -26,7 +29,7 @@
 }
 
 .rs-muted {
-  color: #737373;
+  color: var(--jaspers-muted-foreground, #737373);
 }
 
 .rs-list {
@@ -41,7 +44,7 @@
   display: flex;
   gap: 10px;
   padding: 8px 10px;
-  border-bottom: 1px solid #e5e5e5;
+  border-bottom: 1px solid var(--jaspers-border, #e5e5e5);
 }
 
 .rs-swatch {
@@ -76,7 +79,7 @@
 
 .rs-error {
   margin-top: 2px;
-  color: #b91c1c;
+  color: var(--jaspers-destructive, #b91c1c);
 }
 
 /* Rooms and the thread. */
@@ -95,7 +98,7 @@
 .rs-section {
   padding: 10px 10px 4px;
   font-weight: 600;
-  border-bottom: 1px solid #e5e5e5;
+  border-bottom: 1px solid var(--jaspers-border, #e5e5e5);
 }
 
 .rs-row {
@@ -103,7 +106,7 @@
   align-items: flex-start;
   gap: 10px;
   padding: 8px 10px;
-  border-bottom: 1px solid #e5e5e5;
+  border-bottom: 1px solid var(--jaspers-border, #e5e5e5);
 }
 
 .rs-clamp {
@@ -118,30 +121,30 @@
 }
 
 .rs-btn {
-  border: 1px solid #e5e5e5;
-  background: #fff;
-  color: #171717;
+  border: 1px solid var(--jaspers-border, #e5e5e5);
+  background: var(--jaspers-background, #fff);
+  color: var(--jaspers-foreground, #171717);
   padding: 2px 8px;
   cursor: pointer;
 }
 
 .rs-btn:hover {
-  border-color: #a3a3a3;
+  border-color: var(--jaspers-muted-foreground, #a3a3a3);
 }
 
 .rs-link {
   border: 0;
   background: none;
   padding: 0;
-  color: #737373;
+  color: var(--jaspers-muted-foreground, #737373);
   cursor: pointer;
   text-decoration: underline;
 }
 
 .rs-tag {
-  border: 1px solid #e5e5e5;
+  border: 1px solid var(--jaspers-border, #e5e5e5);
   padding: 0 6px;
-  color: #525252;
+  color: var(--jaspers-muted-foreground, #525252);
 }
 
 .rs-roster {
@@ -155,7 +158,7 @@
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  border: 1px solid #e5e5e5;
+  border: 1px solid var(--jaspers-border, #e5e5e5);
   padding: 1px 2px 1px 6px;
 }
 
@@ -168,13 +171,13 @@
 .rs-x {
   border: 0;
   background: none;
-  color: #a3a3a3;
+  color: var(--jaspers-muted-foreground, #a3a3a3);
   cursor: pointer;
   padding: 0 4px;
 }
 
 .rs-x:hover {
-  color: #171717;
+  color: var(--jaspers-foreground, #171717);
 }
 
 .rs-thread {
@@ -183,11 +186,11 @@
 
 .rs-msg {
   padding: 10px 12px;
-  border-bottom: 1px solid #e5e5e5;
+  border-bottom: 1px solid var(--jaspers-border, #e5e5e5);
 }
 
 .rs-you {
-  background: #fafafa;
+  background: var(--jaspers-muted, #fafafa);
 }
 
 .rs-meta {
@@ -216,13 +219,13 @@
   padding: 0;
   border: 0;
   background: none;
-  color: #737373;
+  color: var(--jaspers-muted-foreground, #737373);
   cursor: pointer;
 }
 
 .rs-copy:hover {
-  background: #f5f5f5;
-  color: #171717;
+  background: var(--jaspers-muted, #f5f5f5);
+  color: var(--jaspers-foreground, #171717);
 }
 
 .rs-steps {
@@ -233,7 +236,7 @@
 }
 
 .rs-step {
-  border: 1px solid #e5e5e5;
+  border: 1px solid var(--jaspers-border, #e5e5e5);
   padding: 2px 6px;
   font-size: 12px;
 }
@@ -249,11 +252,11 @@
   margin: 4px 0 2px;
   white-space: pre-wrap;
   word-break: break-all;
-  color: #525252;
+  color: var(--jaspers-muted-foreground, #525252);
 }
 
 .rs-step-error summary code {
-  color: #b91c1c;
+  color: var(--jaspers-destructive, #b91c1c);
 }
 
 .rs-files {
@@ -264,8 +267,8 @@
 }
 
 .rs-file {
-  border: 1px solid #e5e5e5;
-  background: #fff;
+  border: 1px solid var(--jaspers-border, #e5e5e5);
+  background: var(--jaspers-background, #fff);
   padding: 2px 8px;
   cursor: pointer;
 }
@@ -283,15 +286,15 @@
 }
 
 .rs-md code {
-  font: 12px ui-monospace, SFMono-Regular, Menlo, monospace;
-  background: #f5f5f5;
+  font: 12px var(--jaspers-font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  background: var(--jaspers-muted, #f5f5f5);
   padding: 0 3px;
 }
 
 .rs-md pre {
   margin: 0 0 8px;
   padding: 8px;
-  background: #f5f5f5;
+  background: var(--jaspers-muted, #f5f5f5);
   overflow-x: auto;
 }
 
@@ -302,13 +305,13 @@
 .rs-md blockquote {
   margin: 0 0 8px;
   padding-left: 10px;
-  border-left: 2px solid #e5e5e5;
-  color: #525252;
+  border-left: 2px solid var(--jaspers-border, #e5e5e5);
+  color: var(--jaspers-muted-foreground, #525252);
 }
 
 .rs-md hr {
   border: 0;
-  border-top: 1px solid #e5e5e5;
+  border-top: 1px solid var(--jaspers-border, #e5e5e5);
   margin: 10px 0;
 }
 
@@ -346,23 +349,23 @@
 
 .rs-table th,
 .rs-table td {
-  border: 1px solid #e5e5e5;
+  border: 1px solid var(--jaspers-border, #e5e5e5);
   padding: 3px 6px;
   vertical-align: top;
 }
 
 .rs-table th {
-  background: #fafafa;
+  background: var(--jaspers-muted, #fafafa);
   font-weight: 600;
 }
 
 /* Citations: the marker after a sourced sentence, and the sources under the answer. */
 
 .rs-cite {
-  font: 600 10.5px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+  font: 600 10.5px/1 var(--jaspers-font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
   margin-left: 2px;
   vertical-align: super;
-  color: #737373;
+  color: var(--jaspers-muted-foreground, #737373);
 }
 
 .rs-cite a {
@@ -382,7 +385,7 @@
 .rs-sources {
   margin-top: 10px;
   padding-top: 6px;
-  border-top: 1px solid #e5e5e5;
+  border-top: 1px solid var(--jaspers-border, #e5e5e5);
   font-size: 12px;
 }
 
@@ -419,22 +422,37 @@
 }
 
 .rs-source-title {
-  color: #171717;
+  color: var(--jaspers-foreground, #171717);
 }
 
 .rs-source-quote {
-  color: #525252;
+  color: var(--jaspers-muted-foreground, #525252);
   font-style: italic;
 }
 
 .rs-source-state {
-  color: #737373;
+  color: var(--jaspers-muted-foreground, #737373);
 }
 
 .rs-source-state.ok {
-  color: #15803d;
+  color: var(--jaspers-positive, #15803d);
 }
 
 .rs-source-state.bad {
-  color: #b91c1c;
+  color: var(--jaspers-negative, #b91c1c);
+}
+
+/* In the dark, the room's own colours, which the theme has no variable for: a lighter blue for links,
+   and the app's warning amber for the marker of a quote not found, which comes last since that marker
+   is a link too. */
+
+@media (prefers-color-scheme: dark) {
+  .rs-md a,
+  .rs-cite a {
+    color: #60a5fa;
+  }
+
+  .rs-cite-bad a {
+    color: #fbbf24;
+  }
 }
