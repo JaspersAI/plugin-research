@@ -14,11 +14,9 @@ https://github.com/JaspersAI/plugin-research
 
 and press Install. The app downloads the latest release, shows where it came from, and asks before any of it runs. A plugin runs code on your computer with your permissions, so install plugins only from people you trust.
 
-## Keys
+## Needs a Jaspers account
 
-- **Jaspers API key**, from your Jaspers account.
-
-The app asks for it the first time an analyst needs it, or take it in Settings > Plugins. It is sealed in your OS keychain and never reaches the plugin or the assistant.
+Sign in with Jaspers in Jaspers Terminal 0.4.0 or later (the first step of setup, or Settings > Account): the research data connects on that sign-in, with no key to paste. An account that does not include research is told so on the connection.
 
 ## Needs
 

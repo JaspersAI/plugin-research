@@ -9,7 +9,7 @@ import { checkRoomHere, claimRooms, createRoom, listRooms, markInterrupted, open
 import { RoomView } from './RoomView'
 
 // Research rooms: a thread and a roster of analysts who research in parallel over the Jaspers research
-// MCP (its own connection, research/jaspers, with its own Jaspers API key), reading what the other views on the user's workspace show. The user talks to a room through
+// MCP (its own connection, research/jaspers, on the user's sign-in with Jaspers), reading what the other views on the user's workspace show. The user talks to a room through
 // the orchestrator, whose tools are these sources; the analysts run as jobs in this plugin's host,
 // and the room view renders the thread from live values.
 
@@ -157,12 +157,12 @@ const Start = z.object({
 
 export default definePlugin({
   id: 'research',
-  secrets: { token: { label: 'Jaspers API key' } },
   connections: {
+    // The server signs its users in through Jaspers' Account: the terminal connects it on its own sign-in
+    // with Jaspers and sends that token as a bearer on every call. Nothing to paste, and nothing in the URL.
     jaspers: defineConnection({
       url: 'https://analyst-api.jsprai.com/mcp/open',
-      auth: 'bearer',
-      headers: { Authorization: 'Bearer ${secret:token}' },
+      auth: 'oauth',
       tools: [
         'search_filings',
         'keyword_search_filings',
