@@ -1,25 +1,29 @@
 import type { BackendContext } from '@jaspers-ai/sdk'
-import { loadAnalysts } from './analyst-files'
-import { resolveAnalysts, type Analyst } from './analysts'
-import { systemPrompt, type PromptInput } from './prompt'
+import { loadAnalysts } from './analyst-files.ts'
+import { resolveAnalysts, type Analyst } from './analysts.ts'
+import { systemPrompt, type PromptInput } from './prompt.ts'
 import {
+  allowConnection,
   claimWorkspace,
   nextSeq,
   onWorkspace,
   outputOf,
+  parseApiVersion,
   roomIdFor,
   roomNews,
+  routeConnections,
   seqFile,
   shownOf,
   threadText,
   transcript,
   type AnalystMessage,
+  type ApiVersion,
   type Message,
   type Room,
   type RoomOutput,
   type UserMessage,
-} from './room'
-import { runAnalyst } from './runner'
+} from './room.ts'
+import { runAnalyst } from './runner.ts'
 
 // Rooms on disk, and the analysts' work on them. A room is rooms/<id>/room.json and one file per
 // message; this host keeps the rooms it has touched in memory, publishes each as live values (the
@@ -36,6 +40,7 @@ export interface RoomLive {
 }
 
 const ROOM_ID = /^[a-z0-9][a-z0-9-]*$/
+const SETTINGS_FILE = 'settings.json'
 
 const rooms = new Map<string, { room: Room; messages: Map<number, Message> }>()
 /** Messages waiting for their analyst to finish the one before, by room and analyst. */
@@ -44,6 +49,23 @@ const queues = new Map<string, number[]>()
 const outstanding = new Map<string, Set<number>>()
 /** Analyst names as last read, for rosters of analysts that have not answered yet. */
 const names = new Map<string, string>()
+
+/** Reads the persisted Research API version from settings.json, defaulting to v1, and publishes it for the views. */
+export async function loadApiVersion(ctx: BackendContext): Promise<ApiVersion> {
+  const raw = await ctx.files.read(SETTINGS_FILE).catch(() => '')
+  const version = parseApiVersion(raw)
+  ctx.live.set('apiVersion', version)
+  return version
+}
+
+/** Saves the selected Research API version to settings.json and publishes it for the views. */
+export async function setApiVersion(ctx: BackendContext, version: ApiVersion): Promise<ApiVersion> {
+  const existing = await readJson<Record<string, unknown>>(ctx, SETTINGS_FILE)
+  const base = typeof existing === 'object' && existing !== null && !Array.isArray(existing) ? existing : {}
+  await ctx.files.write(SETTINGS_FILE, JSON.stringify({ ...base, apiVersion: version }, null, 2))
+  ctx.live.set('apiVersion', version)
+  return version
+}
 
 /** Every analyst, noting their names on the way. */
 async function analystsNow(ctx: BackendContext): Promise<Analyst[]> {
@@ -54,6 +76,7 @@ async function analystsNow(ctx: BackendContext): Promise<Analyst[]> {
 
 /** The rooms of the workspace the call came from, most recently used first. */
 export async function listRooms(ctx: BackendContext): Promise<{ id: string; name: string; tickers: string[]; analysts: string[]; working: string[]; updatedAt: string }[]> {
+  await loadApiVersion(ctx)
   const entries = await ctx.files.list('rooms')
   const found: Room[] = []
   for (const entry of entries) {
@@ -109,6 +132,7 @@ export async function updateRoom(ctx: BackendContext, input: { room: string; nam
 
 /** Reads a room into this host and publishes it. The view asks for this when it opens one. */
 export async function openRoom(ctx: BackendContext, id: string): Promise<RoomLive> {
+  await loadApiVersion(ctx)
   await analystsNow(ctx)
   await here(ctx, id)
   return publishRoom(ctx, id)
@@ -293,7 +317,11 @@ async function answer(ctx: BackendContext, roomId: string, seq: number, signal: 
     await finish(ctx, roomId, { ...message, status: 'error', error: analyst?.error ?? `No analyst ${message.analyst}.`, endedAt: new Date().toISOString() })
     return
   }
-  const connections = await ctx.tools.connections(analyst.connections.length > 0 ? { connections: analyst.connections } : undefined)
+  const apiVersion = await loadApiVersion(ctx)
+  const routed = routeConnections(analyst.connections, apiVersion)
+  const connections = (await ctx.tools.connections(routed.length > 0 ? { connections: routed } : undefined)).filter((c) =>
+    allowConnection(c.id, analyst.connections, apiVersion),
+  )
   const roster = loaded.room.analysts.map((id) => all.find((a) => a.id === id)).filter((a): a is Analyst => a !== undefined)
   const workspaceId = asked.workspace ?? null
   const workspace = workspaceId ? await workspaceOf(ctx, workspaceId) : null
@@ -313,7 +341,7 @@ async function answer(ctx: BackendContext, roomId: string, seq: number, signal: 
   const results = `rooms/${roomId}/sandbox/data`
   const ended = await runAnalyst(
     ctx,
-    { message, analyst, system, firstTurn, title: loaded.room.name, workspace: workspace ? workspaceId : null },
+    { message, analyst, system, firstTurn, title: loaded.room.name, workspace: workspace ? workspaceId : null, apiVersion },
     {
       save: (m) => saveMessage(ctx, roomId, m),
       saveResult: (ref, text) => ctx.files.write(`${results}/${seq}-${ref}.txt`, text),

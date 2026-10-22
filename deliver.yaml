@@ -1,0 +1,4 @@
+verify:
+  - npm ci
+  - npm run typecheck
+  - npm test

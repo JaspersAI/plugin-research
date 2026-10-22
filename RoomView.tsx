@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState, type ReactElement } from 'react'
 import { useBridge, useData, usePanelState, usePublish, type PanelRef } from '@jaspers-ai/sdk'
 import type { Analyst } from './analysts'
 import { MessageRow } from './Message'
+import { parseApiVersion, type ApiVersion } from './room'
 import type { RoomLive } from './rooms'
 import './styles.css'
 
@@ -50,10 +51,15 @@ function Room({ panel, initial }: { panel: PanelRef; initial: RoomState }): Reac
   const [room, setRoom] = usePanelState<string | undefined>(panel, 'room', initial.room)
   const [start, setStart] = usePanelState<Start | undefined>(panel, 'start', initial.start)
   const analysts = (useData('live/analysts') as Listed[] | undefined) ?? []
+  const apiVersion = parseApiVersion(useData('live/apiVersion'))
   const [missing, setMissing] = useState<string | null>(null)
   const [failure, setFailure] = useState<string | null>(null)
   const [note, setNote] = useState<string | null>(null)
   const creating = useRef(false)
+  const setApiVersion = (version: ApiVersion): void => {
+    setFailure(null)
+    bridge.runSource('research/api-version', { version }).catch((err: unknown) => setFailure(err instanceof Error ? err.message : String(err)))
+  }
 
   // A different room, however it was set, gets its own chance to load.
   useEffect(() => {
@@ -87,15 +93,28 @@ function Room({ panel, initial }: { panel: PanelRef; initial: RoomState }): Reac
   }, [bridge, start, room, missing, setRoom, setStart])
 
   if (room && !missing) {
-    return <Thread key={room} panel={panel} room={room} analysts={analysts} note={note} onLeave={() => setRoom(undefined)} onMissing={setMissing} />
+    return (
+      <Thread
+        key={room}
+        panel={panel}
+        room={room}
+        analysts={analysts}
+        apiVersion={apiVersion}
+        note={note}
+        onLeave={() => setRoom(undefined)}
+        onMissing={setMissing}
+      />
+    )
   }
   const notice = start ? null : failure ?? (missing && room ? `There is no room "${room}". Open one below, or ask Jaspers to start a room.` : null)
   return (
     <Picker
       panel={panel}
       analysts={analysts}
+      apiVersion={apiVersion}
       starting={start?.name ?? null}
       notice={notice}
+      onApiVersion={setApiVersion}
       onOpen={(id) => {
         setMissing(null)
         setFailure(null)
@@ -105,17 +124,49 @@ function Room({ panel, initial }: { panel: PanelRef; initial: RoomState }): Reac
   )
 }
 
+function ApiVersionSwitch({
+  version,
+  onSelect,
+}: {
+  version: ApiVersion
+  onSelect: (version: ApiVersion) => void
+}): ReactElement {
+  return (
+    <span className="rs-api" role="group" aria-label="Research API version">
+      <span className="rs-muted">API</span>
+      {(['v1', 'v2'] as const).map((option) => (
+        <button
+          key={option}
+          type="button"
+          aria-pressed={version === option}
+          title={option === 'v2' ? 'v2: r.jsprai.com/mcp/open' : 'v1: analyst-api.jsprai.com/mcp/open'}
+          className={`rs-btn${version === option ? ' rs-btn-on' : ''}`}
+          onClick={() => {
+            if (version !== option) onSelect(option)
+          }}
+        >
+          {option}
+        </button>
+      ))}
+    </span>
+  )
+}
+
 function Picker({
   panel,
   analysts,
+  apiVersion,
   starting,
   notice,
+  onApiVersion,
   onOpen,
 }: {
   panel: PanelRef
   analysts: Listed[]
+  apiVersion: ApiVersion
   starting: string | null
   notice: string | null
+  onApiVersion: (version: ApiVersion) => void
   onOpen: (room: string) => void
 }): ReactElement {
   const { data, loading, error } = useData('research/rooms', {})
@@ -131,6 +182,9 @@ function Picker({
       <div className="rs-bar">
         <span className="rs-title">Research rooms</span>
         <span className="rs-muted">Ask Jaspers: “start a research room on FLWS with Credit and Risk”.</span>
+        <span className="rs-roster">
+          <ApiVersionSwitch version={apiVersion} onSelect={onApiVersion} />
+        </span>
       </div>
       <div className="rs-scroll">
         {starting && <p className="rs-muted rs-pad">Starting {starting}…</p>}
@@ -180,6 +234,7 @@ function Thread({
   panel,
   room,
   analysts,
+  apiVersion,
   note,
   onLeave,
   onMissing,
@@ -187,6 +242,7 @@ function Thread({
   panel: PanelRef
   room: string
   analysts: Listed[]
+  apiVersion: ApiVersion
   note: string | null
   onLeave: () => void
   onMissing: (message: string) => void
@@ -280,6 +336,7 @@ function Thread({
             Stop
           </button>
         )}
+        <ApiVersionSwitch version={apiVersion} onSelect={(version) => act('research/api-version', { version })} />
         <button type="button" className="rs-btn" onClick={() => act('research/reveal', { room })}>
           Show folder
         </button>

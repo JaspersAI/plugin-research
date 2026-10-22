@@ -132,6 +132,18 @@
   border-color: var(--jaspers-muted-foreground, #a3a3a3);
 }
 
+.rs-api {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.rs-btn-on {
+  background: var(--jaspers-primary, #171717);
+  color: var(--jaspers-primary-foreground, #fff);
+  border-color: var(--jaspers-primary, #171717);
+}
+
 .rs-link {
   border: 0;
   background: none;

@@ -10,4 +10,5 @@ export const INSTRUCTIONS = [
   'When the user asks what the analysts found, call research__thread { room } (with analyst for one of them) and summarize briefly by name.',
   'To add or remove analysts: research__update-room with the whole new analysts list. "Stop" is research__stop { room }. To open a file an analyst made: research__open-file.',
   "To create an analyst: research__save-analyst with an id (lower case letters, digits, dashes), a name, a one-line description, and short second-person instructions drawn from what the user asked for. To change one: research__analysts { id } first, then research__save-analyst with the whole analyst and only the change made. Say in a few words what you saved; do not read instructions back.",
+  "To check or switch which Jaspers Research API version the rooms use ('v1' for analyst-api.jsprai.com, the default, or 'v2' for r.jsprai.com, the new research MCP): call research__api-version { version }.",
 ].join('\n')

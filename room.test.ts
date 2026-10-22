@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import {
   answerText,
+  apiVersionLine,
   claimWorkspace,
   evictResults,
   nextSeq,
@@ -16,11 +17,17 @@ import {
   stepFor,
   threadText,
   transcript,
+  allowConnection,
+  inactiveResearchConnection,
+  parseApiVersion,
+  researchConnection,
+  routeConnections,
   type AnalystMessage,
   type Message,
   type Room,
   type UserMessage,
 } from './room.ts'
+import { createRoom, loadApiVersion, post, setApiVersion } from './rooms.ts'
 
 const NAMES = { credit: 'Credit Analyst', risk: 'Risk Analyst' }
 const ROOM: Room = { id: 'flws-credit-7k2p', name: 'FLWS credit', tickers: ['FLWS'], analysts: ['credit', 'risk'], createdAt: '', updatedAt: '' }
@@ -318,4 +325,152 @@ test('an older room goes to the workspace its first message came from, while tha
   assert.equal(claimWorkspace([from(1, 'gone'), from(2, 'ws-2'), answer(3, 'credit', 'a')], new Set(['ws-2']), 'ws-9'), 'ws-2')
   assert.equal(claimWorkspace([from(1)], new Set(['ws-1']), 'ws-9'), 'ws-9')
   assert.equal(claimWorkspace([], new Set(), null), null)
+})
+
+test('the API version defaults to v1, reads v2 from a string or settings JSON, and routes research/jaspers to the active connection', () => {
+  assert.equal(parseApiVersion(undefined), 'v1')
+  assert.equal(parseApiVersion(''), 'v1')
+  assert.equal(parseApiVersion('{not json'), 'v1')
+  assert.equal(parseApiVersion('{"apiVersion":"v3"}'), 'v1')
+  assert.equal(parseApiVersion('v1'), 'v1')
+  assert.equal(parseApiVersion('v2'), 'v2')
+  assert.equal(parseApiVersion('{"apiVersion":"v2"}'), 'v2')
+  assert.equal(parseApiVersion({ apiVersion: 'v2' }), 'v2')
+
+  assert.equal(researchConnection('v1'), 'research/jaspers')
+  assert.equal(researchConnection('v2'), 'research/jaspers-v2')
+  assert.equal(inactiveResearchConnection('v1'), 'research/jaspers-v2')
+  assert.equal(inactiveResearchConnection('v2'), 'research/jaspers')
+
+  assert.deepEqual(routeConnections(['research/jaspers', 'screener/jaspers'], 'v1'), ['research/jaspers', 'screener/jaspers'])
+  assert.deepEqual(routeConnections(['research/jaspers', 'screener/jaspers'], 'v2'), ['research/jaspers-v2', 'screener/jaspers'])
+  assert.deepEqual(routeConnections(['research/jaspers', 'research/jaspers-v2'], 'v2'), ['research/jaspers-v2'])
+  assert.deepEqual(routeConnections([], 'v2'), [])
+
+  assert.equal(allowConnection('research/jaspers', ['research/jaspers'], 'v1'), true)
+  assert.equal(allowConnection('research/jaspers-v2', ['research/jaspers'], 'v1'), false)
+  assert.equal(allowConnection('research/jaspers', ['research/jaspers'], 'v2'), false)
+  assert.equal(allowConnection('research/jaspers-v2', ['research/jaspers'], 'v2'), true)
+  assert.equal(allowConnection('research/jaspers', [], 'v1'), true)
+  assert.equal(allowConnection('research/jaspers-v2', [], 'v1'), false)
+  assert.equal(allowConnection('research/jaspers', [], 'v2'), false)
+  assert.equal(allowConnection('research/jaspers-v2', [], 'v2'), true)
+  assert.equal(allowConnection('other', [], 'v2'), true)
+  assert.equal(apiVersionLine('v1'), 'Research API is v1 (https://analyst-api.jsprai.com/mcp/open).')
+  assert.equal(apiVersionLine('v2'), 'Research API is v2 (https://r.jsprai.com/mcp/open).')
+})
+
+test('loadApiVersion and setApiVersion persist settings.json, publish live/apiVersion, and route room runs to v2', async () => {
+  const files = new Map<string, string>([
+    ['plugin:analysts/risk.md', '---\nname: Risk Analyst\nconnections: [research/jaspers]\n---\nCheck risk.'],
+  ])
+  const live = new Map<string, unknown>()
+  const connectedAs: unknown[] = []
+  const listedAs: unknown[] = []
+  let promptSeen = ''
+  let doneResolve: (() => void) | null = null
+  const donePromise = new Promise<void>((resolve) => {
+    doneResolve = resolve
+  })
+
+  const ctx = {
+    workspace: 'ws-1',
+    fetch,
+    files: {
+      read: async (path: string) => {
+        if (!files.has(path)) throw new Error(`ENOENT: ${path}`)
+        return files.get(path)!
+      },
+      write: async (path: string, content: string) => {
+        files.set(path, content)
+      },
+      list: async (path: string) => {
+        if (path === 'plugin:analysts') return [{ path: 'plugin:analysts/risk.md', size: 10, modified: 1, dir: false }]
+        if (path === 'analysts') return []
+        const prefix = `${path}/`
+        const seen = new Set<string>()
+        const entries: { path: string; size: number; modified: number; dir: boolean }[] = []
+        for (const [key, val] of files) {
+          if (!key.startsWith(prefix)) continue
+          const rest = key.slice(prefix.length)
+          const slash = rest.indexOf('/')
+          if (slash === -1) entries.push({ path: key, size: val.length, modified: 1, dir: false })
+          else {
+            const dir = `${prefix}${rest.slice(0, slash)}`
+            if (!seen.has(dir)) {
+              seen.add(dir)
+              entries.push({ path: dir, size: 0, modified: 1, dir: true })
+            }
+          }
+        }
+        return entries
+      },
+      remove: async () => undefined,
+      watch: () => () => undefined,
+      open: async () => undefined,
+      reveal: async () => undefined,
+    },
+    live: {
+      set: (key: string, value: unknown) => void live.set(key, value),
+      delete: (key: string) => void live.delete(key),
+    },
+    notify: () => {
+      doneResolve?.()
+    },
+    llm: {
+      complete: async (req: { system: string }) => {
+        promptSeen = req.system
+        return { text: 'No new risk.', toolCalls: [], stopReason: 'end_turn', usage: { input: 5, output: 3 }, raw: null }
+      },
+    },
+    tools: {
+      connections: async (filter?: { connections?: string[] }) => {
+        connectedAs.push(filter)
+        return [
+          { id: 'research/jaspers', status: 'ready', instructions: 'v1 guide' },
+          { id: 'research/jaspers-v2', status: 'ready', instructions: 'v2 guide' },
+        ]
+      },
+      list: async (filter?: { connections?: string[] }) => {
+        listedAs.push(filter)
+        return [
+          { id: 'research/jaspers/search_filings', connection: 'research/jaspers', name: 'search_filings', description: 'v1', parameters: {} },
+          { id: 'research/jaspers-v2/search_filings', connection: 'research/jaspers-v2', name: 'search_filings', description: 'v2', parameters: {} },
+        ]
+      },
+      call: async () => ({ text: '[]', isError: false }),
+    },
+    state: {
+      get: async () => null,
+    },
+    skills: {
+      catalog: async () => [],
+      activate: async () => ({ name: '', description: '', instructions: '', dir: '', files: [] }),
+      read: async () => ({ path: '', content: '', totalLines: 0, startLine: 1, endLine: 0, hasMore: false }),
+    },
+    jobs: {
+      start: (_key: string, run: (signal: AbortSignal) => Promise<void>) => {
+        void run(new AbortController().signal)
+      },
+      abort: () => undefined,
+      running: () => [],
+    },
+  }
+
+  assert.equal(await loadApiVersion(ctx), 'v1')
+  assert.equal(live.get('apiVersion'), 'v1')
+
+  assert.equal(await setApiVersion(ctx, 'v2'), 'v2')
+  assert.equal(live.get('apiVersion'), 'v2')
+  assert.deepEqual(JSON.parse(files.get('settings.json') ?? '{}'), { apiVersion: 'v2' })
+  assert.equal(await loadApiVersion(ctx), 'v2')
+
+  const { room } = await createRoom(ctx, { name: 'FLWS risk', analysts: ['risk'], tickers: ['FLWS'] })
+  await post(ctx, { room: room.id, text: 'Check FLWS risk factors.', to: ['risk'] })
+  await donePromise
+
+  assert.deepEqual(connectedAs, [{ connections: ['research/jaspers-v2'] }])
+  assert.deepEqual(listedAs, [{ connections: ['research/jaspers-v2'] }])
+  assert.equal(promptSeen.includes('## research/jaspers-v2\nv2 guide'), true)
+  assert.equal(promptSeen.includes('## research/jaspers\nv1 guide'), false)
 })

@@ -4,8 +4,8 @@ import { loadAnalysts, publishAnalysts, saveAnalyst } from './analyst-files'
 import { summaryOf, type AnalystInput } from './analysts'
 import { errorText } from './errors'
 import { INSTRUCTIONS } from './instructions'
-import { roomSummary, type RoomOutput } from './room'
-import { checkRoomHere, claimRooms, createRoom, listRooms, markInterrupted, openRoom, post, readThread, stop, updateRoom } from './rooms'
+import { apiVersionLine, RESEARCH_V1_URL, RESEARCH_V2_URL, roomSummary, type ApiVersion, type RoomOutput } from './room'
+import { checkRoomHere, claimRooms, createRoom, listRooms, loadApiVersion, markInterrupted, openRoom, post, readThread, setApiVersion, stop, updateRoom } from './rooms'
 import { RoomView } from './RoomView'
 
 // Research rooms: a thread and a roster of analysts who research in parallel over the Jaspers research
@@ -134,6 +134,34 @@ const saveAnalystSource = defineSource({
   },
 })
 
+const apiVersionSource = defineSource({
+  description:
+    "Read or change the Jaspers Research API version the rooms use: 'v1' (analyst-api.jsprai.com, default) or 'v2' (r.jsprai.com, the new research MCP). Omit version to read the current setting.",
+  input: z.object({
+    version: z.enum(['v1', 'v2']).optional().describe("Which Research API version to use: 'v1' or 'v2'. Omit to read the current version."),
+  }),
+  ttlMs: 0,
+  run: async (args, ctx) => {
+    const { version } = args as { version?: ApiVersion }
+    const active = version ? await setApiVersion(ctx, version) : await loadApiVersion(ctx)
+    return apiVersionLine(active)
+  },
+})
+
+const TOOLS = [
+  'search_filings',
+  'keyword_search_filings',
+  'fetch_filings',
+  'fetch_chunk',
+  'query_filings',
+  'aggregate_filings',
+  'get_distinct_values',
+  'count_filings',
+  'get_company_status',
+  'get_guide',
+  'show_citations',
+]
+
 const Output = z.object({
   room: z.string().nullable(),
   name: z.string().optional(),
@@ -158,30 +186,24 @@ const Start = z.object({
 export default definePlugin({
   id: 'research',
   connections: {
-    // The server signs its users in through Jaspers' Account: the terminal connects it on its own sign-in
-    // with Jaspers and sends that token as a bearer on every call. Nothing to paste, and nothing in the URL.
+    // The servers sign their users in through Jaspers' Account: the terminal connects them on its own
+    // sign-in with Jaspers and sends that token as a bearer on every call. Nothing to paste, and nothing in the URL.
     jaspers: defineConnection({
-      url: 'https://analyst-api.jsprai.com/mcp/open',
+      url: RESEARCH_V1_URL,
       auth: 'oauth',
-      tools: [
-        'search_filings',
-        'keyword_search_filings',
-        'fetch_filings',
-        'fetch_chunk',
-        'query_filings',
-        'aggregate_filings',
-        'get_distinct_values',
-        'count_filings',
-        'get_company_status',
-        'get_guide',
-        'show_citations',
-      ],
+      tools: TOOLS,
+    }),
+    'jaspers-v2': defineConnection({
+      url: RESEARCH_V2_URL,
+      auth: 'oauth',
+      tools: TOOLS,
     }),
   },
   capabilities: ['llm', 'tools', 'files', 'state'],
   async start(ctx) {
     await markInterrupted(ctx)
     await claimRooms(ctx)
+    await loadApiVersion(ctx)
     await publishAnalysts(ctx, false)
     ctx.files.watch('analysts', () => {
       publishAnalysts(ctx, true).catch((err: unknown) => console.warn(`analysts: ${errorText(err, 'failed')}`))
@@ -199,6 +221,7 @@ export default definePlugin({
     reveal,
     analysts,
     'save-analyst': saveAnalystSource,
+    'api-version': apiVersionSource,
   },
   views: {
     room: defineView(RoomView, {
