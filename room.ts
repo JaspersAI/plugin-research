@@ -68,6 +68,54 @@ export interface AnalystMessage {
 
 export type Message = UserMessage | AnalystMessage
 
+/** Which Jaspers Research MCP endpoint the rooms and analysts use: v1 (analyst-api) or v2 (research-mcp). */
+export type ApiVersion = 'v1' | 'v2'
+
+export const RESEARCH_V1 = 'research/jaspers'
+export const RESEARCH_V2 = 'research/jaspers-v2'
+export const RESEARCH_V1_URL = 'https://analyst-api.jsprai.com/mcp/open'
+export const RESEARCH_V2_URL = 'https://r.jsprai.com/mcp/open'
+
+/** Reads the API version from a string, a parsed settings object, or raw settings.json text; defaults to v1. */
+export function parseApiVersion(value: unknown): ApiVersion {
+  if (value === 'v2') return 'v2'
+  if (value === 'v1') return 'v1'
+  let parsed = value
+  if (typeof value === 'string' && value.trim().startsWith('{')) {
+    try {
+      parsed = JSON.parse(value)
+    } catch {
+      return 'v1'
+    }
+  }
+  if (typeof parsed === 'object' && parsed !== null && (parsed as Record<string, unknown>)['apiVersion'] === 'v2') {
+    return 'v2'
+  }
+  return 'v1'
+}
+
+/** The connection id for the selected Jaspers Research API version. */
+export function researchConnection(version: ApiVersion): string {
+  return version === 'v2' ? RESEARCH_V2 : RESEARCH_V1
+}
+
+/** The unselected Jaspers Research connection id, excluded when an analyst takes all ready connections. */
+export function inactiveResearchConnection(version: ApiVersion): string {
+  return version === 'v2' ? RESEARCH_V1 : RESEARCH_V2
+}
+
+/** Maps an analyst's connection list to the selected Jaspers Research API version, keeping other connections as written. */
+export function routeConnections(connections: readonly string[], version: ApiVersion): string[] {
+  const active = researchConnection(version)
+  return [...new Set(connections.map((id) => (id === RESEARCH_V1 || id === RESEARCH_V2 ? active : id)))]
+}
+
+/** Whether a connection belongs in an analyst's run for the selected Jaspers Research API version. */
+export function allowConnection(connection: string, connections: readonly string[], version: ApiVersion): boolean {
+  const routed = routeConnections(connections, version)
+  return routed.length > 0 ? routed.includes(connection) : connection !== inactiveResearchConnection(version)
+}
+
 /** What the room view publishes, for the orchestrator. */
 export interface RoomOutput {
   room: string

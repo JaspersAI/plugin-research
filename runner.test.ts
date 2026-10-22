@@ -418,3 +418,41 @@ test("a quote not in the view's text sends the draft back once naming the panel,
   assert.deepEqual(done.citations.map((c) => [c.n, c.panel, c.verified, c.title]), [[1, 'e3', true, 'FLWS Q2 2026 earnings call']])
   assert.deepEqual(done.audit, { uncited: 0, unverified: 0, repaired: true })
 })
+
+test('when apiVersion is v2, research/jaspers routes to research/jaspers-v2 for tools and citations without colliding with v1', async () => {
+  const servedV1: unknown[] = []
+  const servedV2: unknown[] = []
+  let offered: string[] = []
+  const w = world(
+    (_turns, round) => (round === 1 ? reply('Checking v2.', [['search_filings', { query: 'revolver' }]]) : reply(REPAIRED_DRAFT)),
+    {
+      'research/jaspers/search_filings': async () => ({ text: 'from v1', isError: false }),
+      'research/jaspers-v2/search_filings': async () => ({ text: SOURCE, isError: false }),
+      'research/jaspers/show_citations': showCitations(servedV1),
+      'research/jaspers-v2/show_citations': showCitations(servedV2),
+    },
+  )
+  w.ctx.tools.list = async () => [
+    { id: 'research/jaspers/search_filings', connection: 'research/jaspers', name: 'search_filings', description: 'Search v1', parameters: { type: 'object' } },
+    { id: 'research/jaspers/show_citations', connection: 'research/jaspers', name: 'show_citations', description: 'Verify v1', parameters: { type: 'object' } },
+    { id: 'research/jaspers-v2/search_filings', connection: 'research/jaspers-v2', name: 'search_filings', description: 'Search v2', parameters: { type: 'object' } },
+    { id: 'research/jaspers-v2/show_citations', connection: 'research/jaspers-v2', name: 'show_citations', description: 'Verify v2', parameters: { type: 'object' } },
+  ]
+  const script = w.ctx.llm.complete
+  w.ctx.llm.complete = async (req) => {
+    offered = (req.tools ?? []).map((t) => t.name)
+    return script(req)
+  }
+  const done = await runAnalyst(w.ctx, { ...job, apiVersion: 'v2', message: message() }, w.io, new AbortController().signal)
+  assert.equal(done.status, 'done')
+  assert.deepEqual(offered, ['search_filings', 'fetch_result'])
+  assert.equal(w.calls[0], 'research/jaspers-v2/search_filings')
+  assert.equal(servedV1.length, 0)
+  assert.equal(servedV2.length, 2)
+  assert.equal(done.citations.every((c) => c.verified === true), true)
+
+  // An analyst with connections: [] still gets only the selected research API version, so v1 and v2 do not collide.
+  const openAnalyst = parseAnalyst('basic', '---\nname: Basic Analyst\n---\nReason.', 'user')
+  await runAnalyst(w.ctx, { ...job, analyst: openAnalyst, apiVersion: 'v2', message: message() }, w.io, new AbortController().signal)
+  assert.deepEqual(offered, ['search_filings', 'fetch_result'])
+})

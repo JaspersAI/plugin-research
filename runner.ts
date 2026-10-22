@@ -13,7 +13,7 @@ import {
   type ServerRef,
 } from './citations.ts'
 import { errorText } from './errors.ts'
-import { evictResults, resultSummary, stepFor, type AnalystMessage } from './room.ts'
+import { allowConnection, evictResults, resultSummary, routeConnections, stepFor, type AnalystMessage, type ApiVersion } from './room.ts'
 
 // One analyst answering one message: call the model with the thread and the analyst's tools, run
 // whatever tools it asks for, keep going until it answers without asking, and write the message as
@@ -101,6 +101,8 @@ export interface RunJob {
   title: string
   /** The workspace the user asked from, whose views read_workspace reads; null offers no read_workspace. */
   workspace: string | null
+  /** Which Jaspers Research API version this run uses; defaults to v1. */
+  apiVersion?: ApiVersion
 }
 
 /** The kept tool results a model is shown before the oldest large ones become stubs. */
@@ -311,9 +313,13 @@ export async function runAnalyst(ctx: RunnerContext, job: RunJob, io: RunIo, sig
   }
 
   try {
-    const entries = await ctx.tools.list(analyst.connections.length > 0 ? { connections: analyst.connections } : undefined)
-    tools = named(entries, analyst)
-    resolverId = entries.find((e) => e.name === RESOLVER && (analyst.connections.length === 0 || analyst.connections.includes(e.connection)))?.id ?? null
+    const version = job.apiVersion ?? 'v1'
+    const routed = routeConnections(analyst.connections, version)
+    const entries = (await ctx.tools.list(routed.length > 0 ? { connections: routed } : undefined)).filter((e) =>
+      allowConnection(e.connection, analyst.connections, version),
+    )
+    tools = named(entries, { ...analyst, connections: routed })
+    resolverId = entries.find((e) => e.name === RESOLVER)?.id ?? null
     const definitions = [
       ...[...tools.values()].map(({ name, entry }) => ({ name, description: entry.description, parameters: entry.parameters })),
       FETCH_RESULT,

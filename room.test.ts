@@ -16,6 +16,11 @@ import {
   stepFor,
   threadText,
   transcript,
+  allowConnection,
+  inactiveResearchConnection,
+  parseApiVersion,
+  researchConnection,
+  routeConnections,
   type AnalystMessage,
   type Message,
   type Room,
@@ -318,4 +323,35 @@ test('an older room goes to the workspace its first message came from, while tha
   assert.equal(claimWorkspace([from(1, 'gone'), from(2, 'ws-2'), answer(3, 'credit', 'a')], new Set(['ws-2']), 'ws-9'), 'ws-2')
   assert.equal(claimWorkspace([from(1)], new Set(['ws-1']), 'ws-9'), 'ws-9')
   assert.equal(claimWorkspace([], new Set(), null), null)
+})
+
+test('the API version defaults to v1, reads v2 from a string or settings JSON, and routes research/jaspers to the active connection', () => {
+  assert.equal(parseApiVersion(undefined), 'v1')
+  assert.equal(parseApiVersion(''), 'v1')
+  assert.equal(parseApiVersion('{not json'), 'v1')
+  assert.equal(parseApiVersion('{"apiVersion":"v3"}'), 'v1')
+  assert.equal(parseApiVersion('v1'), 'v1')
+  assert.equal(parseApiVersion('v2'), 'v2')
+  assert.equal(parseApiVersion('{"apiVersion":"v2"}'), 'v2')
+  assert.equal(parseApiVersion({ apiVersion: 'v2' }), 'v2')
+
+  assert.equal(researchConnection('v1'), 'research/jaspers')
+  assert.equal(researchConnection('v2'), 'research/jaspers-v2')
+  assert.equal(inactiveResearchConnection('v1'), 'research/jaspers-v2')
+  assert.equal(inactiveResearchConnection('v2'), 'research/jaspers')
+
+  assert.deepEqual(routeConnections(['research/jaspers', 'screener/jaspers'], 'v1'), ['research/jaspers', 'screener/jaspers'])
+  assert.deepEqual(routeConnections(['research/jaspers', 'screener/jaspers'], 'v2'), ['research/jaspers-v2', 'screener/jaspers'])
+  assert.deepEqual(routeConnections(['research/jaspers', 'research/jaspers-v2'], 'v2'), ['research/jaspers-v2'])
+  assert.deepEqual(routeConnections([], 'v2'), [])
+
+  assert.equal(allowConnection('research/jaspers', ['research/jaspers'], 'v1'), true)
+  assert.equal(allowConnection('research/jaspers-v2', ['research/jaspers'], 'v1'), false)
+  assert.equal(allowConnection('research/jaspers', ['research/jaspers'], 'v2'), false)
+  assert.equal(allowConnection('research/jaspers-v2', ['research/jaspers'], 'v2'), true)
+  assert.equal(allowConnection('research/jaspers', [], 'v1'), true)
+  assert.equal(allowConnection('research/jaspers-v2', [], 'v1'), false)
+  assert.equal(allowConnection('research/jaspers', [], 'v2'), false)
+  assert.equal(allowConnection('research/jaspers-v2', [], 'v2'), true)
+  assert.equal(allowConnection('other', [], 'v2'), true)
 })
