@@ -101,7 +101,6 @@ function Room({ panel, initial }: { panel: PanelRef; initial: RoomState }): Reac
         analysts={analysts}
         apiVersion={apiVersion}
         note={note}
-        onApiVersion={setApiVersion}
         onLeave={() => setRoom(undefined)}
         onMissing={setMissing}
       />
@@ -237,7 +236,6 @@ function Thread({
   analysts,
   apiVersion,
   note,
-  onApiVersion,
   onLeave,
   onMissing,
 }: {
@@ -246,7 +244,6 @@ function Thread({
   analysts: Listed[]
   apiVersion: ApiVersion
   note: string | null
-  onApiVersion: (version: ApiVersion) => void
   onLeave: () => void
   onMissing: (message: string) => void
 }): ReactElement {
@@ -339,7 +336,7 @@ function Thread({
             Stop
           </button>
         )}
-        <ApiVersionSwitch version={apiVersion} onSelect={onApiVersion} />
+        <ApiVersionSwitch version={apiVersion} onSelect={(version) => act('research/api-version', { version })} />
         <button type="button" className="rs-btn" onClick={() => act('research/reveal', { room })}>
           Show folder
         </button>
