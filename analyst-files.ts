@@ -1,6 +1,6 @@
 import type { BackendContext } from '@jaspers-ai/sdk'
-import { errorText } from './errors'
-import { analystIdOf, mergeAnalysts, parseAnalyst, serializeAnalyst, summaryOf, type Analyst, type AnalystInput } from './analysts'
+import { errorText } from './errors.ts'
+import { analystIdOf, mergeAnalysts, parseAnalyst, serializeAnalyst, summaryOf, type Analyst, type AnalystInput } from './analysts.ts'
 
 // Analysts on disk, through the plugin's files: the presets in this folder's analysts/, the user's
 // in the research data folder's analysts/. The merged list is the live value `analysts`, which the

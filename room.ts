@@ -116,6 +116,11 @@ export function allowConnection(connection: string, connections: readonly string
   return routed.length > 0 ? routed.includes(connection) : connection !== inactiveResearchConnection(version)
 }
 
+/** One line naming the active Jaspers Research API version and its endpoint. */
+export function apiVersionLine(version: ApiVersion): string {
+  return `Research API is ${version} (${version === 'v2' ? RESEARCH_V2_URL : RESEARCH_V1_URL}).`
+}
+
 /** What the room view publishes, for the orchestrator. */
 export interface RoomOutput {
   room: string
