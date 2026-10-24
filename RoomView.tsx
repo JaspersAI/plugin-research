@@ -139,7 +139,7 @@ function ApiVersionSwitch({
           key={option}
           type="button"
           aria-pressed={version === option}
-          title={option === 'v2' ? 'v2: r.jsprai.com/mcp/open' : 'v1: analyst-api.jsprai.com/mcp/open'}
+          title={option === 'v2' ? 'v2: r.jsprai.com/mcp' : 'v1: analyst-api.jsprai.com/mcp/open'}
           className={`rs-btn${version === option ? ' rs-btn-on' : ''}`}
           onClick={() => {
             if (version !== option) onSelect(option)

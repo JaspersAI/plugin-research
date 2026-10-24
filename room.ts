@@ -74,7 +74,7 @@ export type ApiVersion = 'v1' | 'v2'
 export const RESEARCH_V1 = 'research/jaspers'
 export const RESEARCH_V2 = 'research/jaspers-v2'
 export const RESEARCH_V1_URL = 'https://analyst-api.jsprai.com/mcp/open'
-export const RESEARCH_V2_URL = 'https://r.jsprai.com/mcp/open'
+export const RESEARCH_V2_URL = 'https://r.jsprai.com/mcp'
 
 /** Reads the API version from a string, a parsed settings object, or raw settings.json text; defaults to v1. */
 export function parseApiVersion(value: unknown): ApiVersion {

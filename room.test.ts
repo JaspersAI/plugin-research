@@ -357,7 +357,7 @@ test('the API version defaults to v1, reads v2 from a string or settings JSON, a
   assert.equal(allowConnection('research/jaspers-v2', [], 'v2'), true)
   assert.equal(allowConnection('other', [], 'v2'), true)
   assert.equal(apiVersionLine('v1'), 'Research API is v1 (https://analyst-api.jsprai.com/mcp/open).')
-  assert.equal(apiVersionLine('v2'), 'Research API is v2 (https://r.jsprai.com/mcp/open).')
+  assert.equal(apiVersionLine('v2'), 'Research API is v2 (https://r.jsprai.com/mcp).')
 })
 
 test('loadApiVersion and setApiVersion persist settings.json, publish live/apiVersion, and route room runs to v2', async () => {
