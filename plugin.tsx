@@ -167,7 +167,7 @@ const Output = z.object({
   name: z.string().optional(),
   tickers: z.array(z.string()).optional(),
   analysts: z.array(z.object({ id: z.string(), name: z.string(), status: z.string() })).optional(),
-  last: z.array(z.object({ seq: z.number(), from: z.string(), status: z.string(), excerpt: z.string(), files: z.array(z.string()) })).optional(),
+  last: z.array(z.object({ seq: z.number(), from: z.string(), status: z.string(), excerpt: z.string(), files: z.array(z.string()), error: z.string().optional() })).optional(),
   messages: z.number().optional(),
   files: z.number().optional(),
   available: z.number().optional(),

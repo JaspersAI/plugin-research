@@ -241,6 +241,29 @@ test('the thread reads back every message whole with all its sources, or one ana
   assert.equal(all.endsWith('#15 [Credit Analyst] (stopped): Credit view'), true)
   assert.equal(threadText(messages, NAMES, { analyst: 'credit' }), '#15 [Credit Analyst] (stopped): Credit view')
   assert.equal(threadText(messages, NAMES, { last: 1 }), '#15 [Credit Analyst] (stopped): Credit view')
+
+  const firstStep = 'I will check the filing database guide.'
+  const secondStep = `${firstStep}\n\nI will now fetch chunks.`
+  const partialFailed = answer(16, 'credit', secondStep, {
+    status: 'error',
+    steps: [
+      { at: firstStep.length, tool: 'get_guide', args: '{}', summary: '1,200 characters', ref: 'r1', isError: false },
+      { at: secondStep.length, tool: 'fetch_chunk', args: '{}', summary: '800 characters', ref: 'r2', isError: false },
+    ],
+    error: 'Jaspers returned 524: timed out',
+  })
+  assert.equal(
+    threadText([user(1, 'Q', ['credit']), partialFailed], NAMES, {}),
+    [
+      '#1 [You → Credit Analyst]: Q',
+      '',
+      '#16 [Credit Analyst] (error: Jaspers returned 524: timed out): I will now fetch chunks.',
+      '',
+      '(error: Jaspers returned 524: timed out)',
+    ].join('\n'),
+  )
+  const failedOutput = outputOf(ROOM, [user(1, 'Q', ['credit']), partialFailed], [{ id: 'credit', name: 'Credit Analyst' }])
+  assert.equal(failedOutput.last[1]?.error, 'Jaspers returned 524: timed out')
 })
 
 test('the thread shows citation tags as markers and lists the sources with their links', () => {

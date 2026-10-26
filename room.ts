@@ -127,7 +127,7 @@ export interface RoomOutput {
   name: string
   tickers: string[]
   analysts: { id: string; name: string; status: 'idle' | 'queued' | 'working' }[]
-  last: { seq: number; from: string; status: string; excerpt: string; files: string[] }[]
+  last: { seq: number; from: string; status: string; excerpt: string; files: string[]; error?: string }[]
   messages: number
   files: number
 }
@@ -292,6 +292,7 @@ export function outputOf(room: Room, messages: Message[], roster: { id: string; 
         status: m.role === 'user' ? 'sent' : m.status,
         excerpt: (m.role === 'user' ? toMarkers(m.text) : visibleAnswer(m)).slice(0, excerpt),
         files: m.role === 'user' ? [] : m.files.map((f) => f.path.slice(f.path.lastIndexOf('/') + 1)),
+        ...(m.role === 'analyst' && m.error && m.status !== 'done' ? { error: m.error.slice(0, excerpt) } : {}),
       })),
       messages: messages.length,
       files,
@@ -318,9 +319,16 @@ export function threadText(messages: Message[], names: Record<string, string>, o
   return (options.last === undefined ? chosen : chosen.slice(-options.last))
     .map((m) => {
       if (m.role === 'user') return `#${m.seq} ${userLine(m, names)}`
-      const text = visibleAnswer(m) || (m.error ? `(error: ${m.error})` : '(nothing yet)')
+      const trimmed = visibleAnswer(m)
+      const text = trimmed
+        ? m.error && m.status !== 'done'
+          ? `${trimmed}\n\n(${m.status}: ${m.error})`
+          : trimmed
+        : m.error
+          ? `(error: ${m.error})`
+          : '(nothing yet)'
       const sources = (m.citations ?? []).map((c) => `[${c.n}] ${sourceLine(c)}`)
-      return [`#${m.seq} [${m.name}]${statusMark(m)}: ${text}`, ...(sources.length > 0 ? [`Sources: ${sources.join(' ')}`] : [])].join('\n')
+      return [`#${m.seq} [${m.name}]${statusMark(m, Boolean(trimmed))}: ${text}`, ...(sources.length > 0 ? [`Sources: ${sources.join(' ')}`] : [])].join('\n')
     })
     .join('\n\n')
 }
@@ -418,7 +426,7 @@ function messageLine(message: Message, names: Record<string, string>): string {
   if (message.role === 'user') return `#${message.seq} ${userLine(message, names)}`
   const text = message.text.trim()
   if (!text) return `#${message.seq} [${message.name}] (${message.status}${message.error ? `: ${message.error}` : ''})`
-  return `#${message.seq} [${message.name}]${statusMark(message)}: ${text}`
+  return `#${message.seq} [${message.name}]${statusMark(message, true)}: ${text}${message.error && message.status !== 'done' ? `\n\n(${message.status}: ${message.error})` : ''}`
 }
 
 /** Sent for the user's words; for an answer, open while it is queued or being written, final after. */
@@ -427,8 +435,8 @@ function stateOf(message: Message): 'sent' | 'open' | 'final' {
   return message.status === 'queued' || message.status === 'working' ? 'open' : 'final'
 }
 
-function statusMark(message: AnalystMessage): string {
-  return message.status === 'done' ? '' : ` (${message.status})`
+function statusMark(message: AnalystMessage, withError = false): string {
+  return message.status === 'done' ? '' : ` (${message.status}${withError && message.error ? `: ${message.error}` : ''})`
 }
 
 function isStub(output: string): boolean {
