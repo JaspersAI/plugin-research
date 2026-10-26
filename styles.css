@@ -240,6 +240,33 @@
   color: var(--jaspers-foreground, #171717);
 }
 
+.rs-trail {
+  margin: 2px 0 8px;
+  font-size: 12px;
+}
+
+.rs-trail-head {
+  cursor: pointer;
+  color: var(--jaspers-muted-foreground, #737373);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.rs-trail-head span:first-child {
+  font-weight: 500;
+}
+
+.rs-trail-head code {
+  font: 12px var(--jaspers-font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+}
+
+.rs-trail-body {
+  margin-top: 6px;
+  padding-left: 10px;
+  border-left: 2px solid var(--jaspers-border, #e5e5e5);
+}
+
 .rs-steps {
   display: flex;
   flex-direction: column;
