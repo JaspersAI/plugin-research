@@ -5,6 +5,7 @@ import {
   apiVersionLine,
   claimWorkspace,
   evictResults,
+  messageParts,
   nextSeq,
   onWorkspace,
   outputOf,
@@ -17,6 +18,7 @@ import {
   stepFor,
   threadText,
   transcript,
+  visibleAnswer,
   allowConnection,
   inactiveResearchConnection,
   parseApiVersion,
@@ -308,6 +310,57 @@ test('nothing is copied until the answer is in, and an answer that cites nothing
   assert.equal(answerText(answer(2, 'credit', narration, { status: 'stopped', steps: [step] })), '')
   assert.equal(answerText(answer(2, 'credit', `${narration}\n\nDraft view.`, { status: 'working', steps: [step] })), '')
   assert.equal(answerText(answer(2, 'credit', `${narration}\n\nNo figures to cite here.`, { steps: [step] })), 'No figures to cite here.')
+})
+
+test('excerpts, thread reads, and message parts separate pre-answer tool narration from the final answer', () => {
+  const first = 'I will check the filing database guide and retrieve the latest FLWS filings.'
+  const second = `${first}\n\n<cite document_id="55" chunk_id="1000" quote="the annual report">I will now read the 10-K.</cite>`
+  const final = '## Summary\n\n<cite document_id="55" chunk_id="1021" quote="matures in 2027">The revolver matures in 2027.</cite>'
+  const steps = [
+    { at: first.length, tool: 'query_filings', args: '{"ticker":"FLWS"}', summary: '4 results', ref: 'r1', isError: false },
+    { at: second.length, tool: 'fetch_chunk', args: '{"chunk_id":1021}', summary: '1,200 characters', ref: 'r2', isError: false },
+  ]
+  const working = answer(2, 'credit', second, {
+    status: 'working',
+    steps: [steps[0]!, { ...steps[1]!, summary: null }],
+  })
+  assert.equal(visibleAnswer(working), 'I will now read the 10-K. [1]')
+  assert.deepEqual(messageParts(working), {
+    trail: [
+      { at: 0, text: first, steps: [steps[0]!] },
+      { at: first.length, text: '<cite document_id="55" chunk_id="1000" quote="the annual report">I will now read the 10-K.</cite>', steps: [{ ...steps[1]!, summary: null }] },
+    ],
+    answer: '',
+  })
+  const workingOutput = outputOf(ROOM, [user(1, 'Summarize FLWS filings', ['credit']), working], [{ id: 'credit', name: 'Credit Analyst' }])
+  assert.equal(workingOutput.last[1]!.excerpt, 'I will now read the 10-K. [1]')
+
+  const finished = answer(2, 'credit', `${second}\n\n${final}`, {
+    steps,
+    citations: [
+      { n: 1, key: '55:1000', documentId: '55', chunkId: '1000', sectionKey: null, quote: 'the annual report', claim: 'I will now read the 10-K.', passage: null, url: null, title: '10-K · 2025-09-05 · FLWS', verified: true, match: 'exact' },
+      { n: 2, key: '55:1021', documentId: '55', chunkId: '1021', sectionKey: null, quote: 'matures in 2027', claim: 'The revolver matures in 2027.', passage: null, url: 'https://www.sec.gov/x.htm', title: '10-K · 2025-09-05 · FLWS', verified: true, match: 'exact' },
+    ],
+  })
+  assert.equal(visibleAnswer(finished), '## Summary\n\nThe revolver matures in 2027. [2]')
+  assert.deepEqual(messageParts(finished), {
+    trail: [
+      { at: 0, text: first, steps: [steps[0]!] },
+      { at: first.length, text: '<cite document_id="55" chunk_id="1000" quote="the annual report">I will now read the 10-K.</cite>', steps: [steps[1]!] },
+    ],
+    answer: final,
+  })
+  const doneOutput = outputOf(ROOM, [user(1, 'Summarize FLWS filings', ['credit']), finished], [{ id: 'credit', name: 'Credit Analyst' }])
+  assert.equal(doneOutput.last[1]!.excerpt, '## Summary\n\nThe revolver matures in 2027. [2]')
+  assert.equal(
+    threadText([user(1, 'Summarize FLWS filings', ['credit']), finished], NAMES, {}),
+    [
+      '#1 [You → Credit Analyst]: Summarize FLWS filings',
+      '',
+      '#2 [Credit Analyst]: ## Summary\n\nThe revolver matures in 2027. [2]',
+      'Sources: [1] 10-K · 2025-09-05 · FLWS · verified [2] 10-K · 2025-09-05 · FLWS · verified · https://www.sec.gov/x.htm#:~:text=matures%20in%202027',
+    ].join('\n'),
+  )
 })
 
 test('a room is reached from its own workspace, or from anywhere when a call names none', () => {

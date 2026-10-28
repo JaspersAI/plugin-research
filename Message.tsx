@@ -2,13 +2,14 @@ import { useEffect, useMemo, useState, type ReactElement, type ReactNode } from 
 import { useData } from '@jaspers-ai/sdk'
 import { numberCitations, numberKey, sourceTitle, type Citation } from './citations'
 import { CiteMark, Markdown, type CiteLookup } from './MarkdownView'
-import { answerText, type AnalystMessage, type Message, type Step } from './room'
+import { answerText, messageParts, type AnalystMessage, type Message, type Step } from './room'
 
 // One message in the thread, reading its own live value, so an analyst's progress re-renders its row
-// and nothing else. An answer's tool calls sit where the analyst made them: the text is cut at each
-// step's offset, and the chips go between the pieces. Its sources are listed under it, folded until
-// opened, each a link to the filing on sec.gov that opens on the quoted words. Once it is in, the copy
-// icon under its text, above the sources, puts the answer and its sources on the clipboard.
+// and nothing else. Pre-answer research narration and tool calls sit folded in a Steps log so the
+// answer itself reads cleanly; opening Steps shows the calls where the analyst made them. Its sources
+// are listed under it, folded until opened, each a link to the filing on sec.gov that opens on the
+// quoted words. Once it is in, the copy icon under its text, above the sources, puts the answer and
+// its sources on the clipboard.
 
 interface Props {
   room: string
@@ -72,16 +73,34 @@ export function MessageRow({ room, seq, names, colors, onLink, onFile, onCopy }:
 
 function body(message: AnalystMessage, onLink: (href: string) => void, cite: CiteLookup): ReactNode[] {
   const parts: ReactNode[] = []
-  const offsets = [...new Set(message.steps.map((s) => s.at))].sort((a, b) => a - b)
-  let at = 0
-  for (const offset of offsets) {
-    const piece = message.text.slice(at, offset)
-    if (piece.trim()) parts.push(<Markdown key={`t${at}`} source={piece} onLink={onLink} cite={cite} />)
-    parts.push(<Steps key={`s${offset}`} steps={message.steps.filter((s) => s.at === offset)} />)
-    at = offset
+  const { trail, answer } = messageParts(message)
+  if (trail.length > 0) {
+    const last = message.steps.at(-1)
+    parts.push(
+      <details key="trail" className="rs-trail">
+        <summary className="rs-trail-head">
+          <span>Steps</span>
+          <span className="rs-muted"> · {message.steps.length}</span>
+          {message.status === 'working' && last && (
+            <span className="rs-muted">
+              {' · '}
+              <code>{last.tool}</code>
+              {` · ${last.summary ?? 'running…'}`}
+            </span>
+          )}
+        </summary>
+        <div className="rs-trail-body">
+          {trail.map((block) => (
+            <div key={block.at} className="rs-trail-round">
+              {block.text && <Markdown source={block.text} onLink={onLink} cite={cite} />}
+              <Steps steps={block.steps} />
+            </div>
+          ))}
+        </div>
+      </details>,
+    )
   }
-  const rest = message.text.slice(at)
-  if (rest.trim()) parts.push(<Markdown key={`t${at}`} source={rest} onLink={onLink} cite={cite} />)
+  if (answer) parts.push(<Markdown key="answer" source={answer} onLink={onLink} cite={cite} />)
   if (message.status === 'queued') parts.push(<p key="queued" className="rs-muted">Waiting to start.</p>)
   if (message.status === 'working' && message.steps.length === 0 && !message.text) parts.push(<p key="start" className="rs-muted">Reading the question…</p>)
   if (message.error && message.status !== 'done') {

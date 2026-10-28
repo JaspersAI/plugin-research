@@ -290,7 +290,7 @@ export function outputOf(room: Room, messages: Message[], roster: { id: string; 
         seq: m.seq,
         from: m.role === 'user' ? 'you' : m.name,
         status: m.role === 'user' ? 'sent' : m.status,
-        excerpt: toMarkers(m.text).slice(0, excerpt),
+        excerpt: (m.role === 'user' ? toMarkers(m.text) : visibleAnswer(m)).slice(0, excerpt),
         files: m.role === 'user' ? [] : m.files.map((f) => f.path.slice(f.path.lastIndexOf('/') + 1)),
       })),
       messages: messages.length,
@@ -318,11 +318,65 @@ export function threadText(messages: Message[], names: Record<string, string>, o
   return (options.last === undefined ? chosen : chosen.slice(-options.last))
     .map((m) => {
       if (m.role === 'user') return `#${m.seq} ${userLine(m, names)}`
-      const text = toMarkers(m.text).trim() || (m.error ? `(error: ${m.error})` : '(nothing yet)')
+      const text = visibleAnswer(m) || (m.error ? `(error: ${m.error})` : '(nothing yet)')
       const sources = (m.citations ?? []).map((c) => `[${c.n}] ${sourceLine(c)}`)
       return [`#${m.seq} [${m.name}]${statusMark(m)}: ${text}`, ...(sources.length > 0 ? [`Sources: ${sources.join(' ')}`] : [])].join('\n')
     })
     .join('\n\n')
+}
+
+/** One pre-answer research round: what the analyst wrote before the calls, and the calls made there. */
+export interface TrailBlock {
+  at: number
+  text: string
+  steps: Step[]
+}
+
+/** An analyst message split into its folded research trail and its user-facing answer. */
+export interface MessageParts {
+  trail: TrailBlock[]
+  answer: string
+}
+
+/**
+ * The user-facing part of an analyst's message, with citation tags turned into [n] markers numbered
+ * across the whole message: what follows its last tool call when it has written an answer there, or
+ * the latest paragraph of its research narration while it has not.
+ */
+export function visibleAnswer(message: Pick<AnalystMessage, 'text' | 'steps'>): string {
+  const numbered = numberCitations(message.text)
+  const at = message.steps.reduce((last, step) => Math.max(last, step.at), 0)
+  const answer = toMarkers(message.text.slice(at), numbered).trim()
+  if (answer) return answer
+  const parts = message.text
+    .slice(0, at)
+    .trim()
+    .split(/\n\n+/)
+    .map((p) => toMarkers(p, numbered).trim())
+    .filter(Boolean)
+  return parts.at(-1) ?? ''
+}
+
+/**
+ * Splits an analyst message into its pre-answer research trail (each narration slice and tool-call
+ * batch up to the last tool call) and the final answer written after the last tool call.
+ */
+export function messageParts(message: Pick<AnalystMessage, 'text' | 'steps'>): MessageParts {
+  const offsets = [...new Set(message.steps.map((s) => s.at))].sort((a, b) => a - b)
+  const trail: TrailBlock[] = []
+  let at = 0
+  for (const offset of offsets) {
+    trail.push({
+      at,
+      text: message.text.slice(at, offset).trim(),
+      steps: message.steps.filter((s) => s.at === offset),
+    })
+    at = offset
+  }
+  return {
+    trail,
+    answer: message.text.slice(at).trim(),
+  }
 }
 
 /**
