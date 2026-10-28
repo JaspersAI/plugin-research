@@ -50,7 +50,8 @@ function Room({ panel, initial }: { panel: PanelRef; initial: RoomState }): Reac
   const bridge = useBridge()
   const [room, setRoom] = usePanelState<string | undefined>(panel, 'room', initial.room)
   const [start, setStart] = usePanelState<Start | undefined>(panel, 'start', initial.start)
-  const analysts = (useData('live/analysts') as Listed[] | undefined) ?? []
+  const rawAnalysts = useData('live/analysts')
+  const analysts = Array.isArray(rawAnalysts) ? (rawAnalysts as Listed[]) : []
   const apiVersion = parseApiVersion(useData('live/apiVersion'))
   const [missing, setMissing] = useState<string | null>(null)
   const [failure, setFailure] = useState<string | null>(null)
@@ -170,7 +171,7 @@ function Picker({
   onOpen: (room: string) => void
 }): ReactElement {
   const { data, loading, error } = useData('research/rooms', {})
-  const rooms = (data ?? []) as { id: string; name: string; tickers: string[]; analysts: string[]; working: string[] }[]
+  const rooms = (Array.isArray(data) ? data : []) as { id: string; name: string; tickers?: string[]; analysts?: string[]; working?: string[] }[]
   usePublish(panel, {
     room: null,
     available: analysts.filter((a) => a.error === null).length,
@@ -197,11 +198,11 @@ function Picker({
             <div className="rs-body">
               <div className="rs-line">
                 <span className="rs-name">{room.name}</span>
-                <span className="rs-muted">{room.tickers.join(', ')}</span>
+                <span className="rs-muted">{(room.tickers ?? []).join(', ')}</span>
               </div>
               <div className="rs-muted">
-                {room.analysts.join(', ') || 'no analysts'}
-                {room.working.length > 0 ? ` · ${room.working.join(', ')} working` : ''}
+                {(room.analysts ?? []).join(', ') || 'no analysts'}
+                {(room.working ?? []).length > 0 ? ` · ${(room.working ?? []).join(', ')} working` : ''}
               </div>
             </div>
             <button type="button" className="rs-btn" onClick={() => onOpen(room.id)}>
@@ -301,21 +302,24 @@ function Thread({
   }, [])
 
   const output = live?.output
-  const busy = output?.analysts.some((a) => a.status !== 'idle') ?? false
+  const roster = Array.isArray(output?.analysts) ? output.analysts : []
+  const tickers = Array.isArray(live?.room?.tickers) ? live.room.tickers : []
+  const seqs = Array.isArray(live?.seqs) ? live.seqs : []
+  const busy = roster.some((a) => a.status !== 'idle')
   return (
     <div className="rs-root">
       <div className="rs-bar">
         <button type="button" className="rs-link" onClick={onLeave}>
           Rooms
         </button>
-        <span className="rs-title">{live?.room.name ?? room}</span>
-        {live?.room.tickers.map((ticker) => (
+        <span className="rs-title">{live?.room?.name ?? room}</span>
+        {tickers.map((ticker) => (
           <span key={ticker} className="rs-tag">
             {ticker}
           </span>
         ))}
         <span className="rs-roster">
-          {output?.analysts.map((analyst) => (
+          {roster.map((analyst) => (
             <span key={analyst.id} className="rs-chip">
               <span className="rs-swatch" style={{ background: colors[analyst.id] ?? 'var(--jaspers-muted-foreground, #737373)' }} aria-hidden />
               {analyst.name}
@@ -324,7 +328,7 @@ function Thread({
                 type="button"
                 className="rs-x"
                 aria-label={`Remove ${analyst.name}`}
-                onClick={() => act('research/update-room', { room, analysts: live!.room.analysts.filter((id) => id !== analyst.id) })}
+                onClick={() => act('research/update-room', { room, analysts: (live?.room?.analysts ?? []).filter((id) => id !== analyst.id) })}
               >
                 ×
               </button>
@@ -352,10 +356,10 @@ function Thread({
         }}
       >
         <div ref={content} className="rs-thread">
-          {live && live.seqs.length === 0 && (
+          {live && seqs.length === 0 && (
             <p className="rs-muted rs-pad">No messages yet. Talk to the room through Jaspers: “ask Credit what the refinancing risk is”.</p>
           )}
-          {live?.seqs.map((seq) => (
+          {seqs.map((seq) => (
             <MessageRow
               key={seq}
               room={room}

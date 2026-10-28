@@ -210,6 +210,18 @@ test('the output says who is working and the last three messages, within 4 KB', 
   assert.equal(roomSummary(output), 'FLWS credit · Credit Analyst working, Risk Analyst queued · 5 msgs · 1 file')
 })
 
+test('roomSummary and message helpers handle partial loading output and missing collections without throwing', () => {
+  assert.equal(roomSummary({ room: 'flws-credit-7k2p' }), 'flws-credit-7k2p')
+  assert.equal(roomSummary({ room: 'flws-credit-7k2p', name: 'FLWS credit', messages: 2, files: 0 }), 'FLWS credit · idle · 2 msgs · 0 files')
+  const partial = { ...answer(2, 'credit', 'Draft answer.'), steps: undefined as unknown as AnalystMessage['steps'], files: undefined as unknown as AnalystMessage['files'] }
+  assert.equal(visibleAnswer(partial), 'Draft answer.')
+  assert.deepEqual(messageParts(partial), { trail: [], answer: 'Draft answer.' })
+  assert.equal(answerText(partial), 'Draft answer.')
+  const out = outputOf(ROOM, [partial], [{ id: 'credit', name: 'Credit Analyst' }])
+  assert.equal(out.files, 0)
+  assert.deepEqual(out.last[0]?.files, [])
+})
+
 test('the thread reads back every message whole with all its sources, or one analyst or the last few if asked', () => {
   const notes: Message[] = Array.from({ length: 11 }, (_, i) => answer(i + 2, 'risk', `note ${i}`))
   const citations = Array.from({ length: 12 }, (_, i) => ({

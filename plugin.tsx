@@ -238,7 +238,7 @@ export default definePlugin({
           : output?.starting
             ? `Starting ${output.starting}…`
             : output?.room
-              ? roomSummary(output as RoomOutput)
+              ? roomSummary(output)
               : `No room open · ${output?.available ?? 0} analysts`,
     }),
   },

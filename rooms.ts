@@ -85,14 +85,14 @@ export async function listRooms(ctx: BackendContext): Promise<{ id: string; name
     if (room && onWorkspace(room, ctx.workspace)) found.push(room)
   }
   return found
-    .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
+    .sort((a, b) => (b.updatedAt ?? '').localeCompare(a.updatedAt ?? ''))
     .map((room) => ({
       id: room.id,
-      name: room.name,
-      tickers: room.tickers,
-      analysts: room.analysts,
+      name: room.name ?? room.id,
+      tickers: Array.isArray(room.tickers) ? room.tickers : [],
+      analysts: Array.isArray(room.analysts) ? room.analysts : [],
       working: [...(rooms.get(room.id)?.messages.values() ?? [])].filter(isBusy).map((m) => (m as AnalystMessage).analyst),
-      updatedAt: room.updatedAt,
+      updatedAt: room.updatedAt ?? '',
     }))
 }
 
@@ -395,7 +395,7 @@ async function writeRoom(ctx: BackendContext, room: Room): Promise<void> {
 function publishRoom(ctx: BackendContext, roomId: string): RoomLive {
   const loaded = rooms.get(roomId)!
   const messages = sorted(loaded.messages)
-  const roster = loaded.room.analysts.map((id) => ({ id, name: names.get(id) ?? id }))
+  const roster = (loaded.room.analysts ?? []).map((id) => ({ id, name: names.get(id) ?? id }))
   const live: RoomLive = { room: loaded.room, seqs: messages.map((m) => m.seq), output: outputOf(loaded.room, messages, roster) }
   ctx.live.set(`rooms/${roomId}`, live)
   return live
@@ -405,8 +405,14 @@ async function load(ctx: BackendContext, id: string): Promise<{ room: Room; mess
   if (typeof id !== 'string' || !ROOM_ID.test(id)) throw new Error(`No room ${String(id)}.`)
   const cached = rooms.get(id)
   if (cached) return cached
-  const room = await readJson<Room>(ctx, `rooms/${id}/room.json`)
-  if (!room) throw new Error(`No room ${id}. Call research__rooms for the rooms there are.`)
+  const rawRoom = await readJson<Room>(ctx, `rooms/${id}/room.json`)
+  if (!rawRoom) throw new Error(`No room ${id}. Call research__rooms for the rooms there are.`)
+  const room: Room = {
+    ...rawRoom,
+    name: typeof rawRoom.name === 'string' && rawRoom.name ? rawRoom.name : id,
+    tickers: Array.isArray(rawRoom.tickers) ? rawRoom.tickers : [],
+    analysts: Array.isArray(rawRoom.analysts) ? rawRoom.analysts : [],
+  }
   const messages = new Map<number, Message>()
   for (const file of await ctx.files.list(`rooms/${id}/messages`)) {
     const message = await readJson<Message>(ctx, file.path)
