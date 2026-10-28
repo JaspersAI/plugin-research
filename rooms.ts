@@ -415,6 +415,7 @@ async function load(ctx: BackendContext, id: string): Promise<{ room: Room; mess
   const loaded = { room, messages }
   rooms.set(id, loaded)
   for (const message of messages.values()) ctx.live.set(`rooms/${id}/m/${message.seq}`, message)
+  publishRoom(ctx, id)
   return loaded
 }
 

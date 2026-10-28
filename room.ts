@@ -302,10 +302,16 @@ export function outputOf(room: Room, messages: Message[], roster: { id: string; 
 }
 
 /** The one line the model's map carries for a room. */
-export function roomSummary(output: RoomOutput): string {
-  const busy = output.analysts.filter((a) => a.status !== 'idle').map((a) => `${a.name} ${a.status}`)
+export function roomSummary(output: Partial<RoomOutput> & { room?: string | null }): string {
+  const analysts = Array.isArray(output.analysts) ? output.analysts : []
+  const busy = analysts.filter((a) => a.status !== 'idle').map((a) => `${a.name} ${a.status}`)
   const plural = (n: number, word: string): string => `${n} ${word}${n === 1 ? '' : 's'}`
-  return [output.name, busy.length > 0 ? busy.join(', ') : 'idle', plural(output.messages, 'msg'), plural(output.files, 'file')].join(' · ')
+  return [
+    output.name || output.room || 'Room',
+    busy.length > 0 ? busy.join(', ') : 'idle',
+    plural(output.messages ?? 0, 'msg'),
+    plural(output.files ?? 0, 'file'),
+  ].join(' · ')
 }
 
 /**

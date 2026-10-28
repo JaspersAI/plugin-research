@@ -29,7 +29,7 @@ import {
   type Room,
   type UserMessage,
 } from './room.ts'
-import { createRoom, loadApiVersion, post, setApiVersion } from './rooms.ts'
+import { createRoom, loadApiVersion, post, readThread, setApiVersion } from './rooms.ts'
 
 const NAMES = { credit: 'Credit Analyst', risk: 'Risk Analyst' }
 const ROOM: Room = { id: 'flws-credit-7k2p', name: 'FLWS credit', tickers: ['FLWS'], analysts: ['credit', 'risk'], createdAt: '', updatedAt: '' }
@@ -208,6 +208,7 @@ test('the output says who is working and the last three messages, within 4 KB', 
   assert.equal(output.files, 1)
   assert.equal(JSON.stringify(output).length <= 4096, true)
   assert.equal(roomSummary(output), 'FLWS credit · Credit Analyst working, Risk Analyst queued · 5 msgs · 1 file')
+  assert.equal(roomSummary({ room: 'apple-nvidia-gpus-12qm' }), 'apple-nvidia-gpus-12qm · idle · 0 msgs · 0 files')
 })
 
 test('the thread reads back every message whole with all its sources, or one analyst or the last few if asked', () => {
@@ -526,4 +527,25 @@ test('loadApiVersion and setApiVersion persist settings.json, publish live/apiVe
   assert.deepEqual(listedAs, [{ connections: ['research/jaspers-v2'] }])
   assert.equal(promptSeen.includes('## research/jaspers-v2\nv2 guide'), true)
   assert.equal(promptSeen.includes('## research/jaspers\nv1 guide'), false)
+
+  // A room read from disk via readThread (not yet in the in-memory rooms map) publishes its live room state.
+  files.set(
+    'rooms/disk-room-1234/room.json',
+    JSON.stringify({
+      id: 'disk-room-1234',
+      name: 'Disk room',
+      tickers: ['AAPL'],
+      analysts: ['risk'],
+      createdAt: '2026-10-28T00:00:00Z',
+      updatedAt: '2026-10-28T00:00:00Z',
+      workspace: 'ws-1',
+    }),
+  )
+  files.set(
+    'rooms/disk-room-1234/messages/000001.json',
+    JSON.stringify({ seq: 1, role: 'user', text: 'Any new risks?', to: ['risk'], at: '2026-10-28T00:00:00Z', workspace: 'ws-1' }),
+  )
+  const diskThread = await readThread(ctx, { room: 'disk-room-1234' })
+  assert.equal(diskThread, '#1 [You → Risk Analyst]: Any new risks?')
+  assert.deepEqual((live.get('rooms/disk-room-1234') as { seqs?: number[] } | undefined)?.seqs, [1])
 })
