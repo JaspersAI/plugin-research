@@ -279,33 +279,36 @@ export function outputOf(room: Room, messages: Message[], roster: { id: string; 
     const status = theirs.some((m) => m.status === 'working') ? 'working' : theirs.some((m) => m.status === 'queued') ? 'queued' : 'idle'
     return { id, name, status: status as RoomOutput['analysts'][number]['status'] }
   })
-  const files = messages.reduce((sum, m) => sum + (m.role === 'analyst' ? m.files.length : 0), 0)
+  const files = messages.reduce((sum, m) => sum + (m.role === 'analyst' ? (m.files ?? []).length : 0), 0)
   for (const excerpt of [EXCERPT, 150, 60]) {
     const output: RoomOutput = {
       room: room.id,
       name: room.name,
-      tickers: room.tickers,
+      tickers: room.tickers ?? [],
       analysts,
       last: messages.slice(-3).map((m) => ({
         seq: m.seq,
         from: m.role === 'user' ? 'you' : m.name,
         status: m.role === 'user' ? 'sent' : m.status,
-        excerpt: (m.role === 'user' ? toMarkers(m.text) : visibleAnswer(m)).slice(0, excerpt),
-        files: m.role === 'user' ? [] : m.files.map((f) => f.path.slice(f.path.lastIndexOf('/') + 1)),
+        excerpt: (m.role === 'user' ? toMarkers(m.text ?? '') : visibleAnswer(m)).slice(0, excerpt),
+        files: m.role === 'user' ? [] : (m.files ?? []).map((f) => f.path.slice(f.path.lastIndexOf('/') + 1)),
       })),
       messages: messages.length,
       files,
     }
     if (JSON.stringify(output).length <= OUTPUT_MAX) return output
   }
-  return { room: room.id, name: room.name, tickers: room.tickers, analysts, last: [], messages: messages.length, files }
+  return { room: room.id, name: room.name, tickers: room.tickers ?? [], analysts, last: [], messages: messages.length, files }
 }
 
 /** The one line the model's map carries for a room. */
-export function roomSummary(output: RoomOutput): string {
-  const busy = output.analysts.filter((a) => a.status !== 'idle').map((a) => `${a.name} ${a.status}`)
+export function roomSummary(output: Partial<RoomOutput> & { room?: string | null }): string {
+  const name = output.name || output.room || 'Research room'
+  if (!Array.isArray(output.analysts) && output.messages === undefined && output.files === undefined) return name
+  const analysts = Array.isArray(output.analysts) ? output.analysts : []
+  const busy = analysts.filter((a) => a.status !== 'idle').map((a) => `${a.name} ${a.status}`)
   const plural = (n: number, word: string): string => `${n} ${word}${n === 1 ? '' : 's'}`
-  return [output.name, busy.length > 0 ? busy.join(', ') : 'idle', plural(output.messages, 'msg'), plural(output.files, 'file')].join(' · ')
+  return [name, busy.length > 0 ? busy.join(', ') : 'idle', plural(output.messages ?? 0, 'msg'), plural(output.files ?? 0, 'file')].join(' · ')
 }
 
 /**
@@ -314,7 +317,8 @@ export function roomSummary(output: RoomOutput): string {
  * with the sec.gov link.
  */
 export function threadText(messages: Message[], names: Record<string, string>, options: { last?: number; analyst?: string }): string {
-  const chosen = options.analyst ? messages.filter((m) => m.role === 'analyst' && m.analyst === options.analyst) : messages
+  const list = messages ?? []
+  const chosen = options.analyst ? list.filter((m) => m.role === 'analyst' && m.analyst === options.analyst) : list
   return (options.last === undefined ? chosen : chosen.slice(-options.last))
     .map((m) => {
       if (m.role === 'user') return `#${m.seq} ${userLine(m, names)}`
@@ -344,11 +348,13 @@ export interface MessageParts {
  * the latest paragraph of its research narration while it has not.
  */
 export function visibleAnswer(message: Pick<AnalystMessage, 'text' | 'steps'>): string {
-  const numbered = numberCitations(message.text)
-  const at = message.steps.reduce((last, step) => Math.max(last, step.at), 0)
-  const answer = toMarkers(message.text.slice(at), numbered).trim()
+  const text = message.text ?? ''
+  const steps = Array.isArray(message.steps) ? message.steps : []
+  const numbered = numberCitations(text)
+  const at = steps.reduce((last, step) => Math.max(last, step.at), 0)
+  const answer = toMarkers(text.slice(at), numbered).trim()
   if (answer) return answer
-  const parts = message.text
+  const parts = text
     .slice(0, at)
     .trim()
     .split(/\n\n+/)
@@ -362,20 +368,22 @@ export function visibleAnswer(message: Pick<AnalystMessage, 'text' | 'steps'>): 
  * batch up to the last tool call) and the final answer written after the last tool call.
  */
 export function messageParts(message: Pick<AnalystMessage, 'text' | 'steps'>): MessageParts {
-  const offsets = [...new Set(message.steps.map((s) => s.at))].sort((a, b) => a - b)
+  const text = message.text ?? ''
+  const steps = Array.isArray(message.steps) ? message.steps : []
+  const offsets = [...new Set(steps.map((s) => s.at))].sort((a, b) => a - b)
   const trail: TrailBlock[] = []
   let at = 0
   for (const offset of offsets) {
     trail.push({
       at,
-      text: message.text.slice(at, offset).trim(),
-      steps: message.steps.filter((s) => s.at === offset),
+      text: text.slice(at, offset).trim(),
+      steps: steps.filter((s) => s.at === offset),
     })
     at = offset
   }
   return {
     trail,
-    answer: message.text.slice(at).trim(),
+    answer: text.slice(at).trim(),
   }
 }
 
@@ -387,9 +395,11 @@ export function messageParts(message: Pick<AnalystMessage, 'text' | 'steps'>): M
  */
 export function answerText(message: AnalystMessage): string {
   if (message.status === 'queued' || message.status === 'working') return ''
-  const at = message.steps.reduce((last, step) => Math.max(last, step.at), 0)
-  const answer = message.text.slice(at)
-  const numbered = numberCitations(message.text)
+  const fullText = message.text ?? ''
+  const steps = Array.isArray(message.steps) ? message.steps : []
+  const at = steps.reduce((last, step) => Math.max(last, step.at), 0)
+  const answer = fullText.slice(at)
+  const numbered = numberCitations(fullText)
   const text = toMarkers(answer, numbered).trim()
   if (!text) return ''
   const cited = new Set(numberCitations(answer).map((c) => numberKey(c.attrs)))
@@ -410,13 +420,13 @@ function sourceLine(c: Citation): string {
 }
 
 function userLine(message: UserMessage, names: Record<string, string>): string {
-  return `[You → ${message.to.map((id) => names[id] ?? id).join(', ')}]: ${message.text}`
+  return `[You → ${(message.to ?? []).map((id) => names[id] ?? id).join(', ')}]: ${message.text ?? ''}`
 }
 
 /** One message as an analyst reads it: its number, who, and what it says, or where it stands when it says nothing. */
 function messageLine(message: Message, names: Record<string, string>): string {
   if (message.role === 'user') return `#${message.seq} ${userLine(message, names)}`
-  const text = message.text.trim()
+  const text = (message.text ?? '').trim()
   if (!text) return `#${message.seq} [${message.name}] (${message.status}${message.error ? `: ${message.error}` : ''})`
   return `#${message.seq} [${message.name}]${statusMark(message)}: ${text}`
 }

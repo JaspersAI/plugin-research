@@ -41,12 +41,13 @@ export function MessageRow({ room, seq, names, colors, onLink, onFile, onCopy }:
       <div className="rs-msg rs-you">
         <div className="rs-meta">
           <span className="rs-name">You</span>
-          <span className="rs-muted">via Jaspers → {message.to.map((id) => names[id] ?? id).join(', ')}</span>
+          <span className="rs-muted">via Jaspers → {(message.to ?? []).map((id) => names[id] ?? id).join(', ')}</span>
         </div>
         <div className="rs-plain">{message.text}</div>
       </div>
     )
   }
+  const files = Array.isArray(message.files) ? message.files : []
   return (
     <div className="rs-msg">
       <div className="rs-meta">
@@ -57,9 +58,9 @@ export function MessageRow({ room, seq, names, colors, onLink, onFile, onCopy }:
       {body(message, onLink, cite)}
       {copy && <CopyButton text={copy} onCopy={onCopy} />}
       {cite.numbers.size > 0 && <Sources message={message} cite={cite} onLink={onLink} />}
-      {message.files.length > 0 && (
+      {files.length > 0 && (
         <div className="rs-files">
-          {message.files.map((file) => (
+          {files.map((file) => (
             <button key={file.path} type="button" className="rs-file" onClick={() => onFile(file.path)} title={file.path}>
               {file.path.slice(file.path.lastIndexOf('/') + 1)}
               <span className="rs-muted"> {size(file.size)}</span>
@@ -73,14 +74,15 @@ export function MessageRow({ room, seq, names, colors, onLink, onFile, onCopy }:
 
 function body(message: AnalystMessage, onLink: (href: string) => void, cite: CiteLookup): ReactNode[] {
   const parts: ReactNode[] = []
+  const steps = Array.isArray(message.steps) ? message.steps : []
   const { trail, answer } = messageParts(message)
   if (trail.length > 0) {
-    const last = message.steps.at(-1)
+    const last = steps.at(-1)
     parts.push(
       <details key="trail" className="rs-trail">
         <summary className="rs-trail-head">
           <span>Steps</span>
-          <span className="rs-muted"> · {message.steps.length}</span>
+          <span className="rs-muted"> · {steps.length}</span>
           {message.status === 'working' && last && (
             <span className="rs-muted">
               {' · '}
@@ -102,7 +104,7 @@ function body(message: AnalystMessage, onLink: (href: string) => void, cite: Cit
   }
   if (answer) parts.push(<Markdown key="answer" source={answer} onLink={onLink} cite={cite} />)
   if (message.status === 'queued') parts.push(<p key="queued" className="rs-muted">Waiting to start.</p>)
-  if (message.status === 'working' && message.steps.length === 0 && !message.text) parts.push(<p key="start" className="rs-muted">Reading the question…</p>)
+  if (message.status === 'working' && steps.length === 0 && !message.text) parts.push(<p key="start" className="rs-muted">Reading the question…</p>)
   if (message.error && message.status !== 'done') {
     parts.push(
       <p key="error" className={message.status === 'error' ? 'rs-error' : 'rs-muted'}>
