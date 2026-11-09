@@ -3,9 +3,10 @@
 // (or <dbcitation document_id section_key quote> for a Filing Database section); the room sends
 // every tag's ids and quote to the connection's show_citations tool, which finds the quote in the
 // source and answers with the sec.gov page that opens on it highlighted. A quote from a view's text,
-// like a transcript on the workspace, is <cite panel quote> instead, and the room checks it itself
-// against the text. Pure: the reading and the numbering can be checked in a test, and the view
-// numbers the same way the runner does.
+// like a transcript on the workspace, is <cite panel quote> instead, and a quote from another tool
+// result, like an earnings call transcript or screen, is <cite source quote>; the room checks both
+// itself against the text that came back. Pure: the reading and the numbering can be checked in a
+// test, and the view numbers the same way the runner does.
 
 export interface CitationTag {
   kind: 'cite' | 'dbcitation'
@@ -35,6 +36,8 @@ export interface Citation {
   sectionKey: string | null
   /** The element whose text the quote is from, for a citation of a view; null or missing for a filing, and in answers saved before views could be cited. */
   panel?: string | null
+  /** The non-SEC tool source a tag names, like an earnings call transcript; null or missing for a filing or a view. */
+  source?: string | null
   quote: string
   claim: string
   /** The words the server found the quote in, as its source has them; null when it found none. */
@@ -65,9 +68,18 @@ export interface ServerRef {
   sourceQuote: string | null
 }
 
+/** One non-error tool result from the analyst's run, for checking non-SEC tool citations locally. */
+export interface ToolSource {
+  ref?: string
+  tool: string
+  args?: string
+  text: string
+}
+
 const OPEN_TAG = /<(cite|dbcitation)\b([^>]*)>/gi
 const ATTR = /([A-Za-z_][\w-]*)\s*=\s*(?:"((?:[^"\\]|\\.)*)"|'((?:[^'\\]|\\.)*)'|([^\s"'>]+))/g
 const CLOSE_TAG = /<\/(?:cite|dbcitation)\s*>/gi
+const SEC_DOCUMENT_ID = /^(?:\d+|[0-9a-f]{24})$/i
 
 /** Every tag in the text, in order, with where it sits. A closing tag with no opening one is not a tag. */
 export function parseCitationTags(text: string): CitationTag[] {
@@ -97,19 +109,50 @@ export function parseCitationTags(text: string): CitationTag[] {
   return tags
 }
 
-/** The panel a tag quotes a view's text from, when it names one and no document. */
-export function citedPanel(attrs: Record<string, string>): string | null {
-  return !(attrs['document_id'] ?? attrs['article_id'] ?? attrs['call_id']) && attrs['panel'] ? attrs['panel'] : null
+/** Whether a tag cites an SEC filing in Jaspers Research (an integer document_id or 24-hex Filing Database _id). */
+export function isFilingCitation(attrs: Record<string, string>): boolean {
+  return (
+    SEC_DOCUMENT_ID.test(attrs['document_id'] ?? '') &&
+    !(attrs['panel'] ?? attrs['source'] ?? attrs['call_id'] ?? attrs['article_id'] ?? attrs['tool'] ?? attrs['ref'])
+  )
 }
 
-/** What names a source: the document and its chunk, the document and its section, or a view's panel. Null for a tag with no id. */
+/** The panel a tag quotes a view's text from, when it names one and no filing or tool source. */
+export function citedPanel(attrs: Record<string, string>): string | null {
+  return !isFilingCitation(attrs) && !(attrs['source'] ?? attrs['call_id'] ?? attrs['article_id'] ?? attrs['tool'] ?? attrs['ref']) && attrs['panel']
+    ? attrs['panel']
+    : null
+}
+
+/** The non-SEC tool source a tag cites, like an earnings call transcript or screen, when it is neither a filing nor a view. */
+export function citedSource(attrs: Record<string, string>): string | null {
+  if (isFilingCitation(attrs) || citedPanel(attrs)) return null
+  return (
+    attrs['source'] ??
+    attrs['title'] ??
+    attrs['label'] ??
+    attrs['call_id'] ??
+    attrs['article_id'] ??
+    attrs['ref'] ??
+    attrs['tool'] ??
+    attrs['url'] ??
+    attrs['document_id'] ??
+    null
+  )
+}
+
+/** What names a source: the document and its chunk, the document and its section, a view's panel, or a tool source. Null for a tag with no id. */
 export function citationKey(attrs: Record<string, string>): string | null {
   const panel = citedPanel(attrs)
   if (panel) return `panel:${panel}`
-  const id = attrs['document_id'] ?? attrs['article_id'] ?? attrs['call_id']
-  if (!id) return null
-  const part = attrs['section_key'] ?? attrs['chunk_id'] ?? ''
-  return `${id}:${part === 'N/A' ? '' : part}`
+  if (isFilingCitation(attrs)) {
+    const id = attrs['document_id']!
+    const part = attrs['section_key'] ?? attrs['chunk_id'] ?? ''
+    return `${id}:${part === 'N/A' ? '' : part}`
+  }
+  const source = citedSource(attrs)
+  if (source) return `source:${source}`
+  return null
 }
 
 /** What gets a number of its own: the source and the quote. Two tags quoting the same words share one. */
@@ -156,6 +199,8 @@ export function sourceTitle(numbered: NumberedCitation, citation: Citation | und
   const { attrs } = numbered
   const panel = citedPanel(attrs)
   if (panel) return citation?.title ?? `View ${panel}`
+  const source = citedSource(attrs)
+  if (source) return citation?.title ?? source
   return (
     citation?.title ??
     `Document ${attrs['document_id'] ?? '?'}${attrs['chunk_id'] ? ` · chunk ${attrs['chunk_id']}` : ''}${attrs['section_key'] ? ` · ${attrs['section_key']}` : ''}`
@@ -369,14 +414,81 @@ export function resolveViewCitations(numbered: NumberedCitation[], texts: Readon
   return citations
 }
 
-/** Text as a quote of it is compared: one kind of quote mark and dash, single spaces, lower case. */
+/**
+ * The citations of non-SEC tool results, checked here against the tool outputs the analyst received
+ * in this run: each quote has to appear in one of those tool results, forgiving spacing, case, quote
+ * marks, dashes, and JSON or HTML escapes.
+ */
+export function resolveToolCitations(numbered: NumberedCitation[], results: readonly ToolSource[]): Citation[] {
+  const citations: Citation[] = []
+  for (const c of numbered) {
+    const source = citedSource(c.attrs)
+    if (!source) continue
+    const quote = c.quote || c.claim
+    const needle = quote ? looseText(quote) : ''
+    const preferred = results.filter((r) => (c.attrs['ref'] && r.ref === c.attrs['ref']) || (c.attrs['tool'] && r.tool === c.attrs['tool']))
+    const ordered = preferred.length > 0 ? [...preferred, ...results.filter((r) => !preferred.includes(r))] : results
+    const matched = needle ? ordered.find((r) => looseText(r.text).includes(needle)) : undefined
+    const found = matched !== undefined
+    const rawUrl = c.attrs['url'] ?? (/^https:\/\/\S+$/i.test(source) ? source : undefined)
+    const url = rawUrl && /^https:\/\/\S+$/i.test(rawUrl) ? rawUrl : null
+    citations.push({
+      n: c.n,
+      key: c.key,
+      documentId: '',
+      chunkId: null,
+      sectionKey: null,
+      panel: null,
+      source,
+      quote: c.quote,
+      claim: c.claim,
+      passage: null,
+      url,
+      title: toolCitationTitle(c.attrs, source, matched ?? preferred[0]),
+      verified: found,
+      match: found ? 'exact' : 'none',
+    })
+  }
+  return citations
+}
+
+function toolCitationTitle(attrs: Record<string, string>, source: string, matched: ToolSource | undefined): string {
+  const explicit = attrs['source'] ?? attrs['title'] ?? attrs['label']
+  if (explicit && !/^r\d+$/i.test(explicit) && !/^[a-z0-9_]+$/i.test(explicit)) return explicit
+  if (matched) {
+    const firstLine = matched.text.split('\n', 1)[0]?.trim() ?? ''
+    if (firstLine && !firstLine.startsWith('{') && !firstLine.startsWith('[')) {
+      const cleaned = firstLine.replace(/\.\s+Machine-transcribed\b.*$/i, '').trim()
+      if (cleaned) return cleaned
+    }
+  }
+  return explicit ?? source
+}
+
+/** Text as a quote of it is compared: escapes undone, one kind of quote mark and dash, single spaces, lower case. */
 function looseText(text: string): string {
-  return text
+  return plainText(text)
     .replace(/[‘’‚‛′`´"“”„‟″]/g, "'")
     .replace(/[‐‑‒–—―]/g, '-')
     .replace(/\s+/g, ' ')
     .trim()
     .toLowerCase()
+}
+
+/** The hover title for a citation marker: where a link opens, or what an unlinked source and its quote are. */
+export function citationTitle(citation: Citation | undefined): string | undefined {
+  if (!citation) return undefined
+  const url = citationLink(citation)
+  if (url) {
+    if (citation.verified === false) return 'The quote was not found in the source; this opens the document.'
+    return /^https?:\/\/(?:[^/]+\.)?sec\.gov(?:\/|$)/i.test(url)
+      ? 'Opens the filing on sec.gov with the quoted passage highlighted.'
+      : 'Opens the source with the quoted passage highlighted.'
+  }
+  const label = citation.title || citation.source || (citation.panel ? `View ${citation.panel}` : '')
+  if (citation.verified === false) return label ? `${label} — the quote was not found in the source.` : 'The quote was not found in the source.'
+  if (citation.verified === true) return citation.quote ? `${label || 'Verified source'} — “${citation.quote}”` : label || 'Verified source'
+  return label || undefined
 }
 
 /**
@@ -550,20 +662,37 @@ export function buildRepairMessage(report: { uncited: string[]; unverified: { n:
   ]
   if (report.uncited.length > 0) {
     parts.push(
-      'Sentences that state tool-derived facts without a citation. For each one either add a citation tag whose quote="…" is copied verbatim from a tool result already in this conversation, remove the claim, or rewrite it so it is clearly your own reasoning:\n' +
+      'Sentences that state tool-derived facts without a citation. For each one either add a citation tag whose quote="…" is copied verbatim from a tool result already in this conversation (<cite document_id="…">, <dbcitation document_id="…">, <cite panel="…">, or <cite source="…"> for other tools), remove the claim, or rewrite it so it is clearly your own reasoning:\n' +
         report.uncited.map((s, i) => `${i + 1}. "${s}"`).join('\n'),
     )
   }
   if (report.unverified.length > 0) {
     parts.push(
-      'Citations whose quote could not be found in the cited source. Replace quote="…" with an exact excerpt copied from that source (same ids), or drop the citation together with the claim it supported:\n' +
+      'Citations whose quote could not be found in the cited source. Replace quote="…" with an exact excerpt copied from that source (same ids or source), or drop the citation together with the claim it supported:\n' +
         report.unverified.map((u, i) => `${i + 1}. ${u.tag} quote="${u.quote}" - ${u.reason}`).join('\n'),
     )
   }
   parts.push(
-    'Rules: use only ids that appear in tool results; every <cite>/<dbcitation> tag carries quote="…" copied character-for-character (5-40 words, no double quotes inside); add no new claims; call a tool only when you must re-read a source to copy an exact quote; keep the structure, tables and formatting of the answer.',
+    'Rules: use only ids and sources that appear in tool results; every <cite>/<dbcitation> tag carries quote="…" copied character-for-character (5-40 words, no double quotes inside); add no new claims; call a tool only when you must re-read a source to copy an exact quote; keep the structure, tables and formatting of the answer; start directly with the answer with no preamble about the audit or rewrite.',
   )
   return parts.join('\n\n')
+}
+
+const REPAIR_PREAMBLE =
+  /^(?:i will (?:now )?|i'll (?:now )?|here is |below is |returning )[^\n]*\b(?:complete|corrected|repaired|updated|revised|verified)\b[^\n]*\b(?:response|answer|draft|summary|report)\b[^\n]*$/i
+
+/** Strips a leading retry announcement a model may put in front of its repaired response, keeping the answer itself. */
+export function stripRepairPreamble(text: string): string {
+  const trimmed = text.trim()
+  const breakAt = trimmed.indexOf('\n')
+  if (breakAt < 0) return trimmed
+  const firstLine = trimmed.slice(0, breakAt).trim()
+  if (!REPAIR_PREAMBLE.test(firstLine)) return trimmed
+  const rest = trimmed
+    .slice(breakAt + 1)
+    .replace(/^\s*(?:---+\s*\n+)?/, '')
+    .trim()
+  return rest || trimmed
 }
 
 function readAttrs(raw: string): Record<string, string> {

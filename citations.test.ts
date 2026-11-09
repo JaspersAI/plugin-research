@@ -4,14 +4,19 @@ import {
   buildRepairMessage,
   citationKey,
   citationLink,
+  citationTitle,
+  citedSource,
   claimsFor,
+  isFilingCitation,
   numberCitations,
   parseCitationTags,
   readShowCitations,
   resolveCitations,
+  resolveToolCitations,
   resolveViewCitations,
   sourceTitle,
   stripCitations,
+  stripRepairPreamble,
   textFragment,
   toMarkers,
   uncitedSentences,
@@ -236,6 +241,150 @@ test('the repair message lists what to fix and how, and nothing when there is no
   assert.equal(text!.startsWith('A citation audit of your draft found the problems below. Reply with the COMPLETE corrected response'), true)
   assert.equal(text!.includes('1. "Uncited one with a 2027 date."'), true)
   assert.equal(text!.includes('1. <cite document_id="55" chunk_id="1031"> quote="a $150.0 million term loan due 2029" - quote not found in the source'), true)
-  assert.equal(text!.includes('use only ids that appear in tool results'), true)
+  assert.equal(text!.includes('use only ids'), true)
+  assert.equal(text!.includes('no preamble'), true)
   assert.equal(buildRepairMessage({ uncited: [], unverified: [] }), null)
+})
+
+test('non-SEC tool citations are keyed by source, numbered, and verified against tool results including JSON-escaped text', () => {
+  assert.equal(isFilingCitation({ document_id: '55', chunk_id: '1020' }), true)
+  assert.equal(isFilingCitation({ document_id: '66f1a2b3c4d5e6f7a8b9c0d1', section_key: 'item7' }), true)
+  assert.equal(isFilingCitation({ document_id: 'FLWS_Q1_2027_call' }), false)
+  assert.equal(isFilingCitation({ source: 'FLWS Q1 2027 earnings call' }), false)
+
+  assert.equal(citedSource({ source: 'FLWS Q1 2027 earnings call', quote: 'q' }), 'FLWS Q1 2027 earnings call')
+  assert.equal(citedSource({ call_id: 'flws-q1-2027', quote: 'q' }), 'flws-q1-2027')
+  assert.equal(citedSource({ document_id: 'FLWS_Q1_2027_call', quote: 'q' }), 'FLWS_Q1_2027_call')
+  assert.equal(citedSource({ document_id: '55', chunk_id: '1020', quote: 'q' }), null)
+  assert.equal(citedSource({ panel: 'e1', quote: 'q' }), null)
+
+  assert.equal(citationKey({ source: 'FLWS Q1 2027 earnings call', quote: 'q' }), 'source:FLWS Q1 2027 earnings call')
+  assert.equal(citationKey({ call_id: 'flws-q1-2027', quote: 'q' }), 'source:flws-q1-2027')
+  assert.equal(citationKey({ document_id: 'FLWS_Q1_2027_call', quote: 'q' }), 'source:FLWS_Q1_2027_call')
+
+  const callTranscript = [
+    '1-800-FLOWERS.COM, Inc. (NASDAQ:FLWS), Q1 2027 earnings call, 2026-11-05. Machine-transcribed plain transcript from EarningsCall: no speaker names, and the paragraph breaks are inferred.',
+    '',
+    'Net order demand improved from -9.4% in July and -10.0% in August to -5.6% in September and -3.4% in October.',
+  ].join('\n')
+  const jsonToolOutput = JSON.stringify({
+    speaker: 'James Langrock',
+    remarks: 'We continue working with "Guggenheim" to evaluate our capital structure.',
+  })
+  const draft = [
+    '<cite source="FLWS Q1 2027 earnings call" quote="Net order demand improved from -9.4% in July and -10.0% in August to -5.6% in September and -3.4% in October">Order demand improved through October.</cite>',
+    '<cite call_id="flws-q1-2027" quote="continue working with \'Guggenheim\' to evaluate our capital structure">FLWS is working with Guggenheim on capital structure.</cite>',
+    '<cite source="FLWS Q1 2027 earnings call" url="https://earningscall.biz/flws" quote="guidance was raised by 20%">Guidance was raised.</cite>',
+    '<cite document_id="55" chunk_id="1020" quote="a filing passage">Filing claim.</cite>',
+  ].join(' ')
+  const numbered = numberCitations(draft)
+  assert.equal(numbered.length, 4)
+  assert.equal(sourceTitle(numbered[0]!, undefined), 'FLWS Q1 2027 earnings call')
+  assert.equal(sourceTitle(numbered[1]!, undefined), 'flws-q1-2027')
+
+  const resolved = resolveToolCitations(numbered, [
+    { ref: 'r1', tool: 'get_transcript', text: callTranscript },
+    { ref: 'r2', tool: 'get_earnings_call_transcript', text: jsonToolOutput },
+  ])
+  assert.deepEqual(
+    resolved.map((c) => [c.n, c.source, c.verified, c.match, c.title, c.url]),
+    [
+      [1, 'FLWS Q1 2027 earnings call', true, 'exact', 'FLWS Q1 2027 earnings call', null],
+      [2, 'flws-q1-2027', true, 'exact', 'flws-q1-2027', null],
+      [3, 'FLWS Q1 2027 earnings call', false, 'none', 'FLWS Q1 2027 earnings call', 'https://earningscall.biz/flws'],
+    ],
+  )
+
+  // When a tag uses a generic tool/ref id, the header from the matched transcript names the source.
+  const generic = numberCitations('<cite tool="get_transcript" quote="Net order demand improved from -9.4% in July">Demand improved.</cite>')
+  const [resolvedGeneric] = resolveToolCitations(generic, [{ ref: 'r1', tool: 'get_transcript', text: callTranscript }])
+  assert.equal(resolvedGeneric!.verified, true)
+  assert.equal(resolvedGeneric!.title, '1-800-FLOWERS.COM, Inc. (NASDAQ:FLWS), Q1 2027 earnings call, 2026-11-05')
+})
+
+test('stripRepairPreamble removes leading retry announcements while keeping headings and prose intact', () => {
+  const body = '## 1. Executive Summary\n\n<cite source="FLWS Q1 2027 earnings call" quote="Net order demand improved">Demand improved.</cite>'
+  assert.equal(
+    stripRepairPreamble(
+      `I will now return the complete corrected response, ensuring every flagged sentence carries valid <dbcitation> tags or is framed as analytical synthesis.\n\n${body}`,
+    ),
+    body,
+  )
+  assert.equal(stripRepairPreamble(`Here is the COMPLETE corrected response:\n\n---\n\n${body}`), body)
+  assert.equal(stripRepairPreamble(body), body)
+  assert.equal(stripRepairPreamble('I will now return the complete corrected response.'), 'I will now return the complete corrected response.')
+})
+
+test('citationTitle describes sec.gov links, other web links, and unlinked transcript or view citations', () => {
+  assert.equal(
+    citationTitle({
+      n: 1,
+      key: '55:1020',
+      documentId: '55',
+      chunkId: '1020',
+      sectionKey: null,
+      quote: 'net sales decreased',
+      claim: 'Sales fell.',
+      passage: null,
+      url: 'https://www.sec.gov/Archives/edgar/data/1/2/a.htm',
+      title: '10-K · 2025-09-05 · FLWS',
+      verified: true,
+      match: 'exact',
+    }),
+    'Opens the filing on sec.gov with the quoted passage highlighted.',
+  )
+  assert.equal(
+    citationTitle({
+      n: 2,
+      key: 'source:news',
+      documentId: '',
+      chunkId: null,
+      sectionKey: null,
+      source: 'News',
+      quote: 'holiday launch',
+      claim: 'Launched.',
+      passage: null,
+      url: 'https://example.com/article',
+      title: 'News',
+      verified: true,
+      match: 'exact',
+    }),
+    'Opens the source with the quoted passage highlighted.',
+  )
+  assert.equal(
+    citationTitle({
+      n: 3,
+      key: 'source:FLWS Q1 2027 earnings call',
+      documentId: '',
+      chunkId: null,
+      sectionKey: null,
+      source: 'FLWS Q1 2027 earnings call',
+      quote: 'net order demand improved to -3.4% in October',
+      claim: 'Demand improved.',
+      passage: null,
+      url: null,
+      title: 'FLWS Q1 2027 earnings call',
+      verified: true,
+      match: 'exact',
+    }),
+    'FLWS Q1 2027 earnings call — “net order demand improved to -3.4% in October”',
+  )
+  assert.equal(
+    citationTitle({
+      n: 4,
+      key: 'source:FLWS Q1 2027 earnings call',
+      documentId: '',
+      chunkId: null,
+      sectionKey: null,
+      source: 'FLWS Q1 2027 earnings call',
+      quote: 'missing quote',
+      claim: 'Claim.',
+      passage: null,
+      url: null,
+      title: 'FLWS Q1 2027 earnings call',
+      verified: false,
+      match: 'none',
+    }),
+    'FLWS Q1 2027 earnings call — the quote was not found in the source.',
+  )
 })
