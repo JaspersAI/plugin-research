@@ -272,6 +272,40 @@ test('the thread shows citation tags as markers and lists the sources with their
   )
   const output = outputOf(ROOM, [user(1, 'Debt?', ['credit']), cited], [{ id: 'credit', name: 'Credit Analyst' }])
   assert.equal(output.last[1]!.excerpt, 'The revolver is $200.0 million. [1] Own view: manageable.')
+
+  const withCall = answer(
+    2,
+    'credit',
+    '<cite source="FLWS Q1 2027 earnings call" quote="net order demand improved to -3.4% in October">Order demand improved to -3.4% in October.</cite>',
+    {
+      citations: [
+        {
+          n: 1,
+          key: 'source:FLWS Q1 2027 earnings call',
+          documentId: '',
+          chunkId: null,
+          sectionKey: null,
+          source: 'FLWS Q1 2027 earnings call',
+          quote: 'net order demand improved to -3.4% in October',
+          claim: 'Order demand improved to -3.4% in October.',
+          passage: null,
+          url: null,
+          title: null,
+          verified: true,
+          match: 'exact',
+        },
+      ],
+    },
+  )
+  assert.equal(
+    threadText([user(1, 'Call?', ['credit']), withCall], NAMES, {}),
+    [
+      '#1 [You → Credit Analyst]: Call?',
+      '',
+      '#2 [Credit Analyst]: Order demand improved to -3.4% in October. [1]',
+      'Sources: [1] FLWS Q1 2027 earnings call · verified',
+    ].join('\n'),
+  )
 })
 
 test('a copied answer is what follows the last tool call, its tags as markers and its sources linked under it', () => {

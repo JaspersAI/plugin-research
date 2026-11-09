@@ -2,15 +2,20 @@ import type { Analyst } from './analysts'
 import {
   buildRepairMessage,
   citedPanel,
+  citedSource,
   claimsFor,
+  isFilingCitation,
   numberCitations,
   readShowCitations,
   resolveCitations,
+  resolveToolCitations,
   resolveViewCitations,
+  stripRepairPreamble,
   uncitedSentences,
   type Citation,
   type NumberedCitation,
   type ServerRef,
+  type ToolSource,
 } from './citations.ts'
 import { errorText } from './errors.ts'
 import { allowConnection, evictResults, resultSummary, routeConnections, stepFor, type AnalystMessage, type ApiVersion } from './room.ts'
@@ -165,6 +170,8 @@ export async function runAnalyst(ctx: RunnerContext, job: RunJob, io: RunIo, sig
   let resolverId: string | null = null
   let turns: Turn[] = [{ role: 'user', text: job.firstTurn }]
   const refs = new Map<string, { ref: string; tool: string; args: string }>()
+  /** Non-error tool results from this run, which non-SEC tool citations are checked against. */
+  const toolResults: ToolSource[] = []
   /** Views' texts as the analyst read them, by the id it named the panel by: what its quotes are checked against. */
   const read = new Map<string, string>()
   let nextRef = 1
@@ -199,6 +206,7 @@ export async function runAnalyst(ctx: RunnerContext, job: RunJob, io: RunIo, sig
           const ref = `r${nextRef++}`
           step.ref = ref
           refs.set(call.id, { ref, tool: call.name, args: step.args })
+          toolResults.push({ ref, tool: call.name, args: step.args, text })
           await io.saveResult(ref, text)
         }
         return { callId: call.id, output: text, isError }
@@ -207,11 +215,12 @@ export async function runAnalyst(ctx: RunnerContext, job: RunJob, io: RunIo, sig
     turns.push({ role: 'tool', results })
   }
 
-  /** Every citation in the text, a view's checked here and a filing's by the server. */
+  /** Every citation in the text, a view's or tool result's checked here and a filing's by the server. */
   async function resolve(numbered: NumberedCitation[]): Promise<Citation[]> {
     const views = numbered.filter((c) => citedPanel(c.attrs) !== null)
-    const filings = numbered.filter((c) => citedPanel(c.attrs) === null)
-    return [...(await resolveViews(views)), ...(await resolveFilings(filings))].sort((a, b) => a.n - b.n)
+    const tools = numbered.filter((c) => citedSource(c.attrs) !== null)
+    const filings = numbered.filter((c) => isFilingCitation(c.attrs))
+    return [...(await resolveViews(views)), ...resolveToolCitations(tools, toolResults), ...(await resolveFilings(filings))].sort((a, b) => a.n - b.n)
   }
 
   /**
@@ -280,11 +289,17 @@ export async function runAnalyst(ctx: RunnerContext, job: RunJob, io: RunIo, sig
         n: c.n,
         tag: c.panel
           ? `<cite panel="${c.panel}">`
-          : c.sectionKey !== null
-            ? `<dbcitation document_id="${c.documentId}" section_key="${c.sectionKey}">`
-            : `<cite document_id="${c.documentId}" chunk_id="${c.chunkId ?? 'N/A'}">`,
+          : c.source
+            ? `<cite source="${c.source}">`
+            : c.sectionKey !== null
+              ? `<dbcitation document_id="${c.documentId}" section_key="${c.sectionKey}">`
+              : `<cite document_id="${c.documentId}" chunk_id="${c.chunkId ?? 'N/A'}">`,
         quote: c.quote,
-        reason: c.panel ? `quote not found in the text of ${c.panel}` : 'quote not found in the source',
+        reason: c.panel
+          ? `quote not found in the text of ${c.panel}`
+          : c.source
+            ? 'quote not found in the tool results'
+            : 'quote not found in the source',
       })),
     })
     if (!allowRepair || repair === null || signal.aborted) return
@@ -300,8 +315,9 @@ export async function runAnalyst(ctx: RunnerContext, job: RunJob, io: RunIo, sig
         break // the draft stands as it was
       }
       if (reply.toolCalls.length === 0) {
-        if (reply.text.trim()) {
-          message.text = message.text.slice(0, draftStart) + reply.text.trim()
+        const cleaned = stripRepairPreamble(reply.text)
+        if (cleaned) {
+          message.text = message.text.slice(0, draftStart) + cleaned
           replaced = true
         }
         break

@@ -456,3 +456,65 @@ test('when apiVersion is v2, research/jaspers routes to research/jaspers-v2 for 
   await runAnalyst(w.ctx, { ...job, analyst: openAnalyst, apiVersion: 'v2', message: message() }, w.io, new AbortController().signal)
   assert.deepEqual(offered, ['search_filings', 'fetch_result'])
 })
+
+test('non-SEC tool citations verify against the run tool results without calling show_citations, and repair strips retry preambles', async () => {
+  const served: unknown[] = []
+  const callTranscript = [
+    '1-800-FLOWERS.COM, Inc. (NASDAQ:FLWS), Q1 2027 earnings call, 2026-11-05. Machine-transcribed plain transcript.',
+    '',
+    'Net order demand improved from -9.4% in July and -10.0% in August to -5.6% in September and -3.4% in October.',
+  ].join('\n')
+  const badDraft = [
+    '<cite document_id="55" chunk_id="1020" quote="a $200.0 million revolving credit facility maturing in June 2027">The revolver is $200.0 million, due June 2027.</cite>',
+    '<cite source="FLWS Q1 2027 earnings call" quote="Net order demand improved to -1.0% in October">Order demand improved in October.</cite>',
+  ].join(' ')
+  const goodDraft = [
+    '<cite document_id="55" chunk_id="1020" quote="a $200.0 million revolving credit facility maturing in June 2027">The revolver is $200.0 million, due June 2027.</cite>',
+    '<cite source="FLWS Q1 2027 earnings call" quote="Net order demand improved from -9.4% in July and -10.0% in August to -5.6% in September and -3.4% in October">Order demand improved to -3.4% in October.</cite>',
+  ].join(' ')
+  const w = world(
+    (turns, round) => {
+      if (round === 1) {
+        return reply('Checking filings and the earnings call.', [
+          ['search_filings', { query: 'revolver' }],
+          ['get_transcript', { symbol: 'FLWS' }],
+        ])
+      }
+      if (round === 2) return reply(badDraft)
+      const last = turns.at(-1)
+      assert.equal(last?.role === 'user' && last.text.includes('<cite source="FLWS Q1 2027 earnings call">'), true)
+      assert.equal(last?.role === 'user' && last.text.includes('quote not found in the tool results'), true)
+      return reply(
+        `I will now return the complete corrected response, ensuring every flagged sentence carries valid citations.\n\n${goodDraft}`,
+      )
+    },
+    {
+      'research/jaspers/search_filings': async () => ({ text: SOURCE, isError: false }),
+      'earningscall/server/get_transcript': async () => ({ text: callTranscript, isError: false }),
+      'research/jaspers/show_citations': showCitations(served),
+    },
+  )
+  w.ctx.tools.list = async () => [
+    { id: 'research/jaspers/search_filings', connection: 'research/jaspers', name: 'search_filings', description: 'Search', parameters: { type: 'object' } },
+    { id: 'research/jaspers/show_citations', connection: 'research/jaspers', name: 'show_citations', description: 'Verify', parameters: { type: 'object' } },
+    { id: 'earningscall/server/get_transcript', connection: 'earningscall/server', name: 'get_transcript', description: 'Transcript', parameters: { type: 'object' } },
+  ]
+  const multiAnalyst = parseAnalyst('basic', '---\nname: Basic Analyst\n---\nReason.', 'preset')
+  const done = await runAnalyst(w.ctx, { ...job, analyst: multiAnalyst, message: message() }, w.io, new AbortController().signal)
+  assert.equal(done.status, 'done')
+  assert.equal(done.text, `Checking filings and the earnings call.\n\n${goodDraft}`)
+  assert.deepEqual(done.audit, { uncited: 0, unverified: 0, repaired: true })
+  // Only the SEC filing citation was sent to show_citations (once before repair, once after).
+  assert.equal(served.length, 2)
+  assert.deepEqual(
+    (served[0] as { claims: { document_id: number }[] }).claims.map((c) => c.document_id),
+    [55],
+  )
+  assert.deepEqual(
+    done.citations.map((c) => [c.n, c.verified, c.title, c.source ?? null]),
+    [
+      [1, true, '10-K · 2025-09-05 · FLWS', null],
+      [2, true, 'FLWS Q1 2027 earnings call', 'FLWS Q1 2027 earnings call'],
+    ],
+  )
+})
