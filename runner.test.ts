@@ -456,3 +456,56 @@ test('when apiVersion is v2, research/jaspers routes to research/jaspers-v2 for 
   await runAnalyst(w.ctx, { ...job, analyst: openAnalyst, apiVersion: 'v2', message: message() }, w.io, new AbortController().signal)
   assert.deepEqual(offered, ['search_filings', 'fetch_result'])
 })
+
+test('get_transcript tool results verify <cite call_id> quotes locally without show_citations, and repair unverified call quotes while stripping repair preambles', async () => {
+  const served: unknown[] = []
+  const transcript = [
+    '1-800-FLOWERS.COM, Inc. (NASDAQ:FLWS), Q1 2027 earnings call, 2026-11-05. Machine-transcribed plain transcript from EarningsCall: no speaker names, and the paragraph breaks are inferred.',
+    '',
+    'We expect the $140.0 million revolver borrowings to be fully repaid during Q2 FY2027.',
+  ].join('\n')
+  const w = world(
+    (turns, round) => {
+      if (round === 1) return reply('Pulling the latest earnings call.', [['get_transcript', { symbol: 'FLWS' }]])
+      if (round === 2) {
+        return reply(
+          '<cite call_id="FLWS Q1 2027" quote="revolver borrowings will be repaid in Q4">Management expects the $140.0 million revolver to be repaid in Q2 FY2027.</cite>',
+        )
+      }
+      const last = turns.at(-1)
+      assert.equal(last?.role === 'user' && last.text.includes('<cite call_id="FLWS Q1 2027">'), true)
+      return reply(
+        [
+          'I will now return the complete corrected response, keeping all unflagged portions identical and ensuring every flagged sentence carries valid <cite> tags.',
+          '',
+          '<cite call_id="FLWS Q1 2027" quote="expect the $140.0 million revolver borrowings to be fully repaid during Q2 FY2027">Management expects the $140.0 million revolver to be repaid in Q2 FY2027.</cite>',
+        ].join('\n'),
+      )
+    },
+    {
+      'earningscall/server/get_transcript': async () => ({ text: transcript, isError: false }),
+      'research/jaspers/show_citations': showCitations(served),
+    },
+  )
+  w.ctx.tools.list = async () => [
+    { id: 'research/jaspers/search_filings', connection: 'research/jaspers', name: 'search_filings', description: 'Search', parameters: { type: 'object' } },
+    { id: 'research/jaspers/show_citations', connection: 'research/jaspers', name: 'show_citations', description: 'Verify', parameters: { type: 'object' } },
+    { id: 'earningscall/server/get_transcript', connection: 'earningscall/server', name: 'get_transcript', description: 'Transcript', parameters: { type: 'object' } },
+  ]
+  const analyst = parseAnalyst(
+    'basic',
+    '---\nname: Basic Analyst\nconnections:\n  - research/jaspers\n  - earningscall/server\n---\nReason.',
+    'preset',
+  )
+  const done = await runAnalyst(w.ctx, { ...job, analyst, message: message() }, w.io, new AbortController().signal)
+  assert.equal(done.status, 'done')
+  assert.equal(
+    done.text,
+    'Pulling the latest earnings call.\n\n<cite call_id="FLWS Q1 2027" quote="expect the $140.0 million revolver borrowings to be fully repaid during Q2 FY2027">Management expects the $140.0 million revolver to be repaid in Q2 FY2027.</cite>',
+  )
+  assert.deepEqual(done.citations.map((c) => [c.n, c.callId, c.verified, c.title, c.url]), [
+    [1, 'FLWS Q1 2027', true, '1-800-FLOWERS.COM, Inc. (NASDAQ:FLWS), Q1 2027 earnings call, 2026-11-05', null],
+  ])
+  assert.deepEqual(done.audit, { uncited: 0, unverified: 0, repaired: true })
+  assert.equal(served.length, 0)
+})

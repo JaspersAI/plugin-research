@@ -127,3 +127,15 @@ test('a requested analyst is found by id, by name, or by the one id its words co
     unmatched: ['macro-strategist', 'broken', 'analyst'],
   })
 })
+
+test('the basic, risk, and fact-checker presets include earningscall/server alongside research/jaspers', async () => {
+  const { readFile } = await import('node:fs/promises')
+  for (const id of ['basic', 'risk', 'fact-checker']) {
+    const raw = await readFile(new URL(`./analysts/${id}.md`, import.meta.url), 'utf8')
+    const analyst = parseAnalyst(id, raw, 'preset')
+    assert.equal(analyst.error, null)
+    assert.deepEqual(analyst.connections, ['research/jaspers', 'earningscall/server'])
+  }
+  const basic = parseAnalyst('basic', await readFile(new URL('./analysts/basic.md', import.meta.url), 'utf8'), 'preset')
+  assert.match(basic.description, /earnings call/i)
+})

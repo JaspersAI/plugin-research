@@ -2,16 +2,19 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import {
   buildRepairMessage,
+  citedCall,
   citationKey,
   citationLink,
   claimsFor,
   numberCitations,
   parseCitationTags,
   readShowCitations,
+  resolveCallCitations,
   resolveCitations,
   resolveViewCitations,
   sourceTitle,
   stripCitations,
+  stripRepairPreamble,
   textFragment,
   toMarkers,
   uncitedSentences,
@@ -238,4 +241,54 @@ test('the repair message lists what to fix and how, and nothing when there is no
   assert.equal(text!.includes('1. <cite document_id="55" chunk_id="1031"> quote="a $150.0 million term loan due 2029" - quote not found in the source'), true)
   assert.equal(text!.includes('use only ids that appear in tool results'), true)
   assert.equal(buildRepairMessage({ uncited: [], unverified: [] }), null)
+})
+
+test("a citation of an earnings call tool result names call_id, and is checked against the tool results' text", () => {
+  const transcript = [
+    '1-800-FLOWERS.COM, Inc. (NASDAQ:FLWS), Q1 2027 earnings call, 2026-11-05. Machine-transcribed plain transcript from EarningsCall: no speaker names, and the paragraph breaks are inferred.',
+    '',
+    'We expect the $140.0 million revolver borrowings to be fully repaid during Q2 FY2027.',
+    '',
+    '— Questions and answers —',
+    '',
+    '1-800-Flowers.com has been comping positive year-over-year over the last two weeks.',
+  ].join('\n')
+  const answer = [
+    '<cite call_id="FLWS Q1 2027" quote="expect the $140.0 million revolver borrowings to be fully repaid during Q2 FY2027">The $140.0 million revolver will be repaid in Q2.</cite>',
+    '<cite call_id="FLWS Q1 2027" quote="comping negative over the last two weeks">Sales were negative.</cite>',
+    '<cite document_id="55" chunk_id="1020" quote="a filing passage">A filing says so.</cite>',
+  ].join(' ')
+  assert.equal(citedCall({ call_id: 'FLWS Q1 2027' }), 'FLWS Q1 2027')
+  assert.equal(citedCall({ document_id: '55', call_id: 'FLWS Q1 2027' }), null)
+  assert.equal(citationKey({ call_id: 'FLWS Q1 2027' }), 'call:FLWS Q1 2027')
+  const numbered = numberCitations(answer)
+  assert.deepEqual(numbered.map((c) => [c.n, c.key]), [
+    [1, 'call:FLWS Q1 2027'],
+    [2, 'call:FLWS Q1 2027'],
+    [3, '55:1020'],
+  ])
+  assert.equal(sourceTitle(numbered[0]!, undefined), 'Call FLWS Q1 2027')
+  const title = '1-800-FLOWERS.COM, Inc. (NASDAQ:FLWS), Q1 2027 earnings call, 2026-11-05'
+  assert.deepEqual(
+    resolveCallCitations(numbered, [transcript]).map((c) => [c.n, c.callId, c.verified, c.match, c.title, c.url]),
+    [
+      [1, 'FLWS Q1 2027', true, 'exact', title, null],
+      [2, 'FLWS Q1 2027', false, 'none', title, null],
+    ],
+  )
+})
+
+test('stripRepairPreamble removes a leading meta-sentence about returning the corrected response while keeping the answer', () => {
+  const repaired = [
+    'I will now return the complete corrected response, keeping all unflagged portions identical and ensuring every flagged sentence carries valid <cite> tags or is framed as analytical synthesis where appropriate, while preserving the structure, tables, and formatting.',
+    '',
+    '### Executive Summary: Q1 FY2027 Earnings Call',
+    '',
+    'Revenue declined 11.1%.',
+  ].join('\n')
+  assert.equal(
+    stripRepairPreamble(repaired),
+    ['### Executive Summary: Q1 FY2027 Earnings Call', '', 'Revenue declined 11.1%.'].join('\n'),
+  )
+  assert.equal(stripRepairPreamble('### Executive Summary\n\nRevenue declined 11.1%.'), '### Executive Summary\n\nRevenue declined 11.1%.')
 })

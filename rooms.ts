@@ -319,8 +319,8 @@ async function answer(ctx: BackendContext, roomId: string, seq: number, signal: 
   }
   const apiVersion = await loadApiVersion(ctx)
   const routed = routeConnections(analyst.connections, apiVersion)
-  const connections = (await ctx.tools.connections(routed.length > 0 ? { connections: routed } : undefined)).filter((c) =>
-    allowConnection(c.id, analyst.connections, apiVersion),
+  const connections = (await ctx.tools.connections(routed.length > 0 ? { connections: routed } : undefined)).filter(
+    (c) => (c.status === undefined || c.status === 'ready') && allowConnection(c.id, analyst.connections, apiVersion),
   )
   const roster = loaded.room.analysts.map((id) => all.find((a) => a.id === id)).filter((a): a is Analyst => a !== undefined)
   const workspaceId = asked.workspace ?? null
