@@ -416,7 +416,8 @@ export function answerText(message: AnalystMessage): string {
 /** One source in a line: what it is, whether its quote was found, and where it opens. */
 function sourceLine(c: Citation): string {
   const state = c.verified === true ? 'verified' : c.verified === false ? 'unverified' : 'unchecked'
-  return [c.title ?? `document ${c.documentId}`, state, citationLink(c) ?? ''].filter(Boolean).join(' · ')
+  const label = c.title || c.source || (c.panel ? `View ${c.panel}` : `document ${c.documentId}`)
+  return [label, state, citationLink(c) ?? ''].filter(Boolean).join(' · ')
 }
 
 function userLine(message: UserMessage, names: Record<string, string>): string {

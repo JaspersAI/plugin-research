@@ -1,5 +1,5 @@
 import { useMemo, type ReactElement, type ReactNode } from 'react'
-import { citationLink, numberKey, type Citation } from './citations'
+import { citationLink, citationTitle, numberKey, type Citation } from './citations'
 import { parseMarkdown, type Block, type Inline } from './markdown'
 
 // An analyst's Markdown as React elements. Nothing here becomes HTML from a string: the parser reads
@@ -126,12 +126,13 @@ function inline(nodes: Inline[], render: Render): ReactNode[] {
 export function CiteMark({ n, citation, onLink }: { n: number; citation: Citation | undefined; onLink: (href: string) => void }): ReactElement {
   const state = citation?.verified === true ? 'rs-cite-ok' : citation?.verified === false ? 'rs-cite-bad' : 'rs-cite-pending'
   const url = citation ? citationLink(citation) : null
-  if (!url) return <sup className={`rs-cite ${state}`}>[{n}]</sup>
+  const title = citationTitle(citation)
+  if (!url) return <sup className={`rs-cite ${state}`} title={title}>[{n}]</sup>
   return (
     <sup className={`rs-cite ${state}`}>
       <a
         href={url}
-        title={citation?.verified === false ? 'The quote was not found in the source; this opens the document.' : `Opens the filing on sec.gov with the quoted passage highlighted.`}
+        title={title}
         onClick={(event) => {
           event.preventDefault()
           onLink(url)

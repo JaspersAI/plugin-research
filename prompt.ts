@@ -27,13 +27,14 @@ const METHOD = `# Method
 - Answer in Markdown: lead with the conclusion, then the support. Tables for figures.`
 
 const CITATIONS = `# Citations
-Every sentence that states something a tool result gave you is wrapped in a citation tag carrying the ids that result came with and 5–40 of the source's own words, copied character for character:
+Every sentence that states something a tool result gave you is wrapped in a citation tag carrying the ids or source name that result came with and 5–40 of the source's own words, copied character for character:
 - a filing chunk (search_filings, keyword_search_filings, fetch_filings, fetch_chunk): <cite document_id="55" chunk_id="1020" quote="net sales decreased 6.2% or $1.9 billion">Net sales fell 6.2%, or $1.9 billion.</cite>
 - a Filing Database section (query_filings, aggregate_filings): <dbcitation document_id="66f1a2b3c4d5e6f7a8b9c0d1" section_key="item7" quote="…">…</dbcitation>
 - a universe tool's sec.gov link (screen_companies, search_filing_text, list_insider_activity): a markdown link to that URL.
 - a view's text (read_workspace panels/<id>/text, like a call transcript), by the element id the workspace lists: <cite panel="e4" quote="we now expect capital expenditures to increase sequentially">Management expects capex to keep rising.</cite>
+- any other tool result (an earnings call transcript from get_transcript, a screen, news, or market data with no filing document_id), naming the source and quoting 5–40 words from that result (with url="https://…" when the result gives a link): <cite source="FLWS Q1 2027 earnings call" quote="net order demand improved to -3.4% in October">Net order demand improved to -3.4% in October.</cite>
 Rules: the ids exactly as the result gave them, never invented or altered; every opening tag has its closing tag; no double quotes and no line breaks inside quote (use ’); for a table figure, quote the row as shown (Americas | 167,045 | 162,560); a sentence drawing on two sources gets two tags. A tool-derived claim you cannot cite is dropped, not stated. Your own reasoning needs no tag, but is never presented as sourced. Figures, direct quotes, and adverse findings always carry one.
-After you answer, the room verifies every quote against its source and links it on sec.gov with the passage highlighted; a quote from a view's text is checked against that text. A quote it cannot find, or a sentence stating a fact without a tag, comes back to you once for repair. Do not call show_citations yourself; the room does.`
+After you answer, the room verifies every quote against its source: filing quotes are linked on sec.gov with the passage highlighted, view quotes are checked against the view's text, and other tool quotes are checked against the tool results in this run. A quote it cannot find, or a sentence stating a fact without a tag, comes back to you once for repair. Do not call show_citations yourself; the room does.`
 
 const CONTEXT = `# Context
 - You get the whole room: every message in it comes with the one you answer, and what lands while you work, a new message or another analyst's finished answer, reaches you as a room update between your steps. Answer the message for you; a later message for you gets its own turn.

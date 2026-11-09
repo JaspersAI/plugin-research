@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
 import { test } from 'node:test'
 import { analystIdOf, mergeAnalysts, parseAnalyst, resolveAnalysts, serializeAnalyst, summaryOf, type Analyst, type AnalystInput } from './analysts.ts'
+import { allowConnection } from './room.ts'
 
 const CREDIT = `---
 name: Credit Analyst
@@ -126,4 +128,17 @@ test('a requested analyst is found by id, by name, or by the one id its words co
     ids: ['qoq-credit-diff'],
     unmatched: ['macro-strategist', 'broken', 'analyst'],
   })
+})
+
+test('Basic Analyst and Fact-checker presets take all ready connections so they can use non-SEC tools like earningscall/server', () => {
+  const basic = parseAnalyst('basic', readFileSync(new URL('./analysts/basic.md', import.meta.url), 'utf8'), 'preset')
+  const factChecker = parseAnalyst('fact-checker', readFileSync(new URL('./analysts/fact-checker.md', import.meta.url), 'utf8'), 'preset')
+  assert.equal(basic.error, null)
+  assert.equal(factChecker.error, null)
+  assert.deepEqual(basic.connections, [])
+  assert.deepEqual(factChecker.connections, [])
+  assert.match(basic.description, /earnings calls/i)
+  assert.equal(allowConnection('research/jaspers', basic.connections, 'v1'), true)
+  assert.equal(allowConnection('research/jaspers-v2', basic.connections, 'v1'), false)
+  assert.equal(allowConnection('earningscall/server', basic.connections, 'v1'), true)
 })
