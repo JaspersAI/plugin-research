@@ -35,6 +35,8 @@ export interface Citation {
   sectionKey: string | null
   /** The element whose text the quote is from, for a citation of a view; null or missing for a filing, and in answers saved before views could be cited. */
   panel?: string | null
+  /** The earnings call a quote is from when cited from a transcript tool result (`<cite call_id="…">`). */
+  callId?: string | null
   quote: string
   claim: string
   /** The words the server found the quote in, as its source has them; null when it found none. */
@@ -102,11 +104,18 @@ export function citedPanel(attrs: Record<string, string>): string | null {
   return !(attrs['document_id'] ?? attrs['article_id'] ?? attrs['call_id']) && attrs['panel'] ? attrs['panel'] : null
 }
 
-/** What names a source: the document and its chunk, the document and its section, or a view's panel. Null for a tag with no id. */
+/** The call a tag quotes a transcript tool result from, when it names one and no filing document or panel. */
+export function citedCall(attrs: Record<string, string>): string | null {
+  return !(attrs['document_id'] ?? attrs['article_id'] ?? attrs['panel']) && attrs['call_id'] ? attrs['call_id'] : null
+}
+
+/** What names a source: the document and its chunk, the document and its section, a call transcript, or a view's panel. Null for a tag with no id. */
 export function citationKey(attrs: Record<string, string>): string | null {
   const panel = citedPanel(attrs)
   if (panel) return `panel:${panel}`
-  const id = attrs['document_id'] ?? attrs['article_id'] ?? attrs['call_id']
+  const call = citedCall(attrs)
+  if (call) return `call:${call}`
+  const id = attrs['document_id'] ?? attrs['article_id']
   if (!id) return null
   const part = attrs['section_key'] ?? attrs['chunk_id'] ?? ''
   return `${id}:${part === 'N/A' ? '' : part}`
@@ -156,6 +165,8 @@ export function sourceTitle(numbered: NumberedCitation, citation: Citation | und
   const { attrs } = numbered
   const panel = citedPanel(attrs)
   if (panel) return citation?.title ?? `View ${panel}`
+  const call = citedCall(attrs)
+  if (call) return citation?.title ?? `Call ${call}`
   return (
     citation?.title ??
     `Document ${attrs['document_id'] ?? '?'}${attrs['chunk_id'] ? ` · chunk ${attrs['chunk_id']}` : ''}${attrs['section_key'] ? ` · ${attrs['section_key']}` : ''}`
@@ -369,6 +380,44 @@ export function resolveViewCitations(numbered: NumberedCitation[], texts: Readon
   return citations
 }
 
+/**
+ * Citations of earnings call transcript tool results (`<cite call_id="…" quote="…">`), checked here
+ * against the tool results the analyst read during the run, since the SEC citation server holds only
+ * filings. The title is taken from the matching transcript's first line.
+ */
+export function resolveCallCitations(numbered: NumberedCitation[], results: readonly string[]): Citation[] {
+  const citations: Citation[] = []
+  for (const c of numbered) {
+    const callId = citedCall(c.attrs)
+    if (!callId) continue
+    const matched = c.quote !== '' ? results.find((text) => looseText(text).includes(looseText(c.quote))) : undefined
+    const verified = results.length === 0 ? null : matched !== undefined
+    citations.push({
+      n: c.n,
+      key: c.key,
+      documentId: '',
+      chunkId: null,
+      sectionKey: null,
+      panel: null,
+      callId,
+      quote: c.quote,
+      claim: c.claim,
+      passage: null,
+      url: null,
+      title: callTitle(matched, results, callId),
+      verified,
+      match: verified === null ? null : verified ? 'exact' : 'none',
+    })
+  }
+  return citations
+}
+
+function callTitle(matched: string | undefined, results: readonly string[], callId: string): string {
+  const source = matched ?? results.find((text) => /\bearnings call\b/i.test(text.split('\n', 1)[0] ?? ''))
+  const first = source?.split('\n', 1)[0]?.replace(/\.\s+Machine-transcribed\b.*$/i, '').trim()
+  return first && !first.startsWith('{') && !first.startsWith('[') ? first : `Call ${callId}`
+}
+
 /** Text as a quote of it is compared: one kind of quote mark and dash, single spaces, lower case. */
 function looseText(text: string): string {
   return text
@@ -542,11 +591,19 @@ function unescapeText(value: string): string {
     })
 }
 
+const REPAIR_PREAMBLE =
+  /^(?:I will now return|Here is|Below is)[^.\n]*?\b(?:complete )?corrected (?:response|answer|draft)\b[^\n]*\n+/i
+
+/** Strips a leading meta-sentence a model may write before the corrected answer on a repair turn. */
+export function stripRepairPreamble(text: string): string {
+  return text.trim().replace(REPAIR_PREAMBLE, '').trim()
+}
+
 /** The message that sends a draft back for repair, or null when the audit found nothing. */
 export function buildRepairMessage(report: { uncited: string[]; unverified: { n: number; tag: string; quote: string; reason: string }[] }): string | null {
   if (report.uncited.length === 0 && report.unverified.length === 0) return null
   const parts = [
-    'A citation audit of your draft found the problems below. Reply with the COMPLETE corrected response - the full text, not a diff or a summary of changes - keeping everything that was not flagged identical.',
+    'A citation audit of your draft found the problems below. Reply with the COMPLETE corrected response - the full text, not a diff or a summary of changes - keeping everything that was not flagged identical. Start directly with the answer itself, with no preamble or commentary about the repair.',
   ]
   if (report.uncited.length > 0) {
     parts.push(

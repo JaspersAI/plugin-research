@@ -87,6 +87,7 @@ test('the citation rules ask for a tag with the ids and a verbatim quote on ever
   const text = systemPrompt(INPUT)
   assert.equal(text.includes('<cite document_id="55" chunk_id="1020" quote="net sales decreased 6.2% or $1.9 billion">'), true)
   assert.equal(text.includes('<dbcitation document_id='), true)
+  assert.equal(text.includes('<cite call_id='), true)
   assert.equal(text.includes('Do not call show_citations yourself'), true)
 })
 

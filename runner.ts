@@ -1,12 +1,15 @@
 import type { Analyst } from './analysts'
 import {
   buildRepairMessage,
+  citedCall,
   citedPanel,
   claimsFor,
   numberCitations,
   readShowCitations,
+  resolveCallCitations,
   resolveCitations,
   resolveViewCitations,
+  stripRepairPreamble,
   uncitedSentences,
   type Citation,
   type NumberedCitation,
@@ -167,6 +170,8 @@ export async function runAnalyst(ctx: RunnerContext, job: RunJob, io: RunIo, sig
   const refs = new Map<string, { ref: string; tool: string; args: string }>()
   /** Views' texts as the analyst read them, by the id it named the panel by: what its quotes are checked against. */
   const read = new Map<string, string>()
+  /** Non-error tool outputs from this run, which earnings call transcript citations are checked against. */
+  const toolTexts: string[] = []
   let nextRef = 1
   /** Where the answer proper starts in the message's text: what the audit reads and a repair replaces. */
   let draftStart = 0
@@ -199,6 +204,7 @@ export async function runAnalyst(ctx: RunnerContext, job: RunJob, io: RunIo, sig
           const ref = `r${nextRef++}`
           step.ref = ref
           refs.set(call.id, { ref, tool: call.name, args: step.args })
+          toolTexts.push(text)
           await io.saveResult(ref, text)
         }
         return { callId: call.id, output: text, isError }
@@ -207,11 +213,14 @@ export async function runAnalyst(ctx: RunnerContext, job: RunJob, io: RunIo, sig
     turns.push({ role: 'tool', results })
   }
 
-  /** Every citation in the text, a view's checked here and a filing's by the server. */
+  /** Every citation in the text, a view's or call transcript's checked here and a filing's by the server. */
   async function resolve(numbered: NumberedCitation[]): Promise<Citation[]> {
     const views = numbered.filter((c) => citedPanel(c.attrs) !== null)
-    const filings = numbered.filter((c) => citedPanel(c.attrs) === null)
-    return [...(await resolveViews(views)), ...(await resolveFilings(filings))].sort((a, b) => a.n - b.n)
+    const calls = numbered.filter((c) => citedCall(c.attrs) !== null)
+    const filings = numbered.filter((c) => citedPanel(c.attrs) === null && citedCall(c.attrs) === null)
+    return [...(await resolveViews(views)), ...resolveCallCitations(calls, toolTexts), ...(await resolveFilings(filings))].sort(
+      (a, b) => a.n - b.n,
+    )
   }
 
   /**
@@ -280,11 +289,17 @@ export async function runAnalyst(ctx: RunnerContext, job: RunJob, io: RunIo, sig
         n: c.n,
         tag: c.panel
           ? `<cite panel="${c.panel}">`
-          : c.sectionKey !== null
-            ? `<dbcitation document_id="${c.documentId}" section_key="${c.sectionKey}">`
-            : `<cite document_id="${c.documentId}" chunk_id="${c.chunkId ?? 'N/A'}">`,
+          : c.callId
+            ? `<cite call_id="${c.callId}">`
+            : c.sectionKey !== null
+              ? `<dbcitation document_id="${c.documentId}" section_key="${c.sectionKey}">`
+              : `<cite document_id="${c.documentId}" chunk_id="${c.chunkId ?? 'N/A'}">`,
         quote: c.quote,
-        reason: c.panel ? `quote not found in the text of ${c.panel}` : 'quote not found in the source',
+        reason: c.panel
+          ? `quote not found in the text of ${c.panel}`
+          : c.callId
+            ? 'quote not found in the transcript'
+            : 'quote not found in the source',
       })),
     })
     if (!allowRepair || repair === null || signal.aborted) return
@@ -300,8 +315,9 @@ export async function runAnalyst(ctx: RunnerContext, job: RunJob, io: RunIo, sig
         break // the draft stands as it was
       }
       if (reply.toolCalls.length === 0) {
-        if (reply.text.trim()) {
-          message.text = message.text.slice(0, draftStart) + reply.text.trim()
+        const cleaned = stripRepairPreamble(reply.text)
+        if (cleaned) {
+          message.text = message.text.slice(0, draftStart) + cleaned
           replaced = true
         }
         break

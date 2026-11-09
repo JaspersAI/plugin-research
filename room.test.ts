@@ -427,7 +427,7 @@ test('the API version defaults to v1, reads v2 from a string or settings JSON, a
 
 test('loadApiVersion and setApiVersion persist settings.json, publish live/apiVersion, and route room runs to v2', async () => {
   const files = new Map<string, string>([
-    ['plugin:analysts/risk.md', '---\nname: Risk Analyst\nconnections: [research/jaspers]\n---\nCheck risk.'],
+    ['plugin:analysts/risk.md', '---\nname: Risk Analyst\nconnections: [research/jaspers, earningscall/server]\n---\nCheck risk.'],
   ])
   const live = new Map<string, unknown>()
   const connectedAs: unknown[] = []
@@ -494,6 +494,7 @@ test('loadApiVersion and setApiVersion persist settings.json, publish live/apiVe
         return [
           { id: 'research/jaspers', status: 'ready', instructions: 'v1 guide' },
           { id: 'research/jaspers-v2', status: 'ready', instructions: 'v2 guide' },
+          { id: 'earningscall/server', status: 'needs-secret', instructions: null },
         ]
       },
       list: async (filter?: { connections?: string[] }) => {
@@ -534,8 +535,9 @@ test('loadApiVersion and setApiVersion persist settings.json, publish live/apiVe
   await post(ctx, { room: room.id, text: 'Check FLWS risk factors.', to: ['risk'] })
   await donePromise
 
-  assert.deepEqual(connectedAs, [{ connections: ['research/jaspers-v2'] }])
-  assert.deepEqual(listedAs, [{ connections: ['research/jaspers-v2'] }])
+  assert.deepEqual(connectedAs, [{ connections: ['research/jaspers-v2', 'earningscall/server'] }])
+  assert.deepEqual(listedAs, [{ connections: ['research/jaspers-v2', 'earningscall/server'] }])
   assert.equal(promptSeen.includes('## research/jaspers-v2\nv2 guide'), true)
   assert.equal(promptSeen.includes('## research/jaspers\nv1 guide'), false)
+  assert.equal(promptSeen.includes('## earningscall/server'), false)
 })
