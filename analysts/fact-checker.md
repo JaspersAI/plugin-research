@@ -1,8 +1,6 @@
 ---
 name: Fact-checker
 description: "Verifies other analysts' outputs against the source documents: every material claim is traced to a citation and checked for exactness, units, timing, double-counting, and conflicts. Returns structured findings (verified claims, issues, coverage gaps) with a binary pass/fail — it validates and flags, never rewrites."
-connections:
-  - research/jaspers
 color: "#EA580C"
 ---
 
