@@ -1,15 +1,21 @@
 import { useEffect, useMemo, useState, type ReactElement, type ReactNode } from 'react'
 import { useData } from '@jaspers-ai/sdk'
-import { numberCitations, numberKey, sourceTitle, type Citation } from './citations'
+import { numberCitations, numberKey, sourceTitle, type Citation, type NumberedCitation } from './citations'
 import { CiteMark, Markdown, type CiteLookup } from './MarkdownView'
-import { answerText, messageParts, type AnalystMessage, type Message, type Step } from './room'
+import {
+  answerText,
+  messageParts,
+  processStatusText,
+  threadStatusText,
+  type AnalystMessage,
+  type Message,
+  type Step,
+} from './room'
 
 // One message in the thread, reading its own live value, so an analyst's progress re-renders its row
-// and nothing else. Pre-answer research narration and tool calls sit folded in a Steps log so the
-// answer itself reads cleanly; opening Steps shows the calls where the analyst made them. Its sources
-// are listed under it, folded until opened, each a link to the filing on sec.gov that opens on the
-// quoted words. Once it is in, the copy icon under its text, above the sources, puts the answer and
-// its sources on the clipboard.
+// and nothing else. The chat thread (MessageRow) shows only the user's questions and the analysts'
+// final research answers, sources, and files; pre-answer narration, turn counts, and tool calls live
+// in the separate Process view (ProcessRow).
 
 interface Props {
   room: string
@@ -22,18 +28,26 @@ interface Props {
   onCopy: (text: string) => Promise<boolean>
 }
 
-export function MessageRow({ room, seq, names, colors, onLink, onFile, onCopy }: Props): ReactElement | null {
+export function MessageRow({ room, seq, colors, onLink, onFile, onCopy }: Props): ReactElement | null {
   const message = useData(`live/rooms/${room}/m/${seq}`) as Message | undefined
   const text = message?.role === 'analyst' ? message.text : ''
   const citations = message?.role === 'analyst' ? message.citations : undefined
-  // Numbered from the text, as the runner numbers them, so a marker shows before the server has answered.
-  const cite = useMemo<CiteLookup>(() => {
+  const parts = useMemo(
+    () => (message?.role === 'analyst' ? messageParts(message) : { trail: [], answer: '' }),
+    [message],
+  )
+  // Numbered from the full text, as the runner numbers them, while filtering Sources to what the final answer cites.
+  const { cite, answerCitations } = useMemo<{ cite: CiteLookup; answerCitations: NumberedCitation[] }>(() => {
     const numbered = numberCitations(text)
+    const citedInAnswer = new Set(numberCitations(parts.answer).map((c) => numberKey(c.attrs)))
     return {
-      numbers: new Map(numbered.map((c) => [numberKey(c.attrs) ?? '', c.n])),
-      resolved: new Map((citations ?? []).map((c) => [c.n, c])),
+      cite: {
+        numbers: new Map(numbered.map((c) => [numberKey(c.attrs) ?? '', c.n])),
+        resolved: new Map((citations ?? []).map((c) => [c.n, c])),
+      },
+      answerCitations: numbered.filter((c) => citedInAnswer.has(numberKey(c.attrs))),
     }
-  }, [text, citations])
+  }, [text, citations, parts.answer])
   const copy = useMemo(() => (message?.role === 'analyst' ? answerText(message) : ''), [message])
   if (!message) return null
   if (message.role === 'user') {
@@ -41,7 +55,6 @@ export function MessageRow({ room, seq, names, colors, onLink, onFile, onCopy }:
       <div className="rs-msg rs-you">
         <div className="rs-meta">
           <span className="rs-name">You</span>
-          <span className="rs-muted">via Jaspers → {(message.to ?? []).map((id) => names[id] ?? id).join(', ')}</span>
         </div>
         <div className="rs-plain">{message.text}</div>
       </div>
@@ -53,11 +66,11 @@ export function MessageRow({ room, seq, names, colors, onLink, onFile, onCopy }:
       <div className="rs-meta">
         <span className="rs-swatch" style={{ background: message.color ?? colors[message.analyst] ?? 'var(--jaspers-muted-foreground, #737373)' }} aria-hidden />
         <span className="rs-name">{message.name}</span>
-        <span className={message.status === 'error' ? 'rs-error' : 'rs-muted'}>{statusText(message)}</span>
+        <span className={message.status === 'error' ? 'rs-error' : 'rs-muted'}>{threadStatusText(message)}</span>
       </div>
-      {body(message, onLink, cite)}
+      {body(message, parts.answer, onLink, cite)}
       {copy && <CopyButton text={copy} onCopy={onCopy} />}
-      {cite.numbers.size > 0 && <Sources message={message} cite={cite} onLink={onLink} />}
+      {answerCitations.length > 0 && <Sources message={message} numbered={answerCitations} cite={cite} onLink={onLink} />}
       {files.length > 0 && (
         <div className="rs-files">
           {files.map((file) => (
@@ -72,39 +85,88 @@ export function MessageRow({ room, seq, names, colors, onLink, onFile, onCopy }:
   )
 }
 
-function body(message: AnalystMessage, onLink: (href: string) => void, cite: CiteLookup): ReactNode[] {
-  const parts: ReactNode[] = []
+export function ProcessRow({
+  room,
+  seq,
+  names,
+  colors,
+  onLink,
+}: Pick<Props, 'room' | 'seq' | 'names' | 'colors' | 'onLink'>): ReactElement | null {
+  const message = useData(`live/rooms/${room}/m/${seq}`) as Message | undefined
+  const text = message?.role === 'analyst' ? message.text : ''
+  const citations = message?.role === 'analyst' ? message.citations : undefined
+  const cite = useMemo<CiteLookup>(() => {
+    const numbered = numberCitations(text)
+    return {
+      numbers: new Map(numbered.map((c) => [numberKey(c.attrs) ?? '', c.n])),
+      resolved: new Map((citations ?? []).map((c) => [c.n, c])),
+    }
+  }, [text, citations])
+  if (!message) return null
+  if (message.role === 'user') {
+    const targets = (message.to ?? []).map((id) => names[id] ?? id).join(', ')
+    return (
+      <div className="rs-msg rs-you">
+        <div className="rs-meta">
+          <span className="rs-name">You</span>
+          {targets && <span className="rs-muted">→ {targets}</span>}
+        </div>
+        <div className="rs-plain">{message.text}</div>
+        {message.context && (
+          <details className="rs-trail">
+            <summary className="rs-trail-head">
+              <span>Context</span>
+            </summary>
+            <div className="rs-trail-body">
+              <div className="rs-plain">{message.context}</div>
+            </div>
+          </details>
+        )}
+      </div>
+    )
+  }
   const steps = Array.isArray(message.steps) ? message.steps : []
-  const { trail, answer } = messageParts(message)
-  if (trail.length > 0) {
-    const last = steps.at(-1)
-    parts.push(
-      <details key="trail" className="rs-trail">
-        <summary className="rs-trail-head">
-          <span>Steps</span>
-          <span className="rs-muted"> · {steps.length}</span>
-          {message.status === 'working' && last && (
-            <span className="rs-muted">
-              {' · '}
-              <code>{last.tool}</code>
-              {` · ${last.summary ?? 'running…'}`}
-            </span>
-          )}
-        </summary>
+  const { trail } = messageParts(message)
+  return (
+    <div className="rs-msg">
+      <div className="rs-meta">
+        <span className="rs-swatch" style={{ background: message.color ?? colors[message.analyst] ?? 'var(--jaspers-muted-foreground, #737373)' }} aria-hidden />
+        <span className="rs-name">{message.name}</span>
+        <span className={message.status === 'error' ? 'rs-error' : 'rs-muted'}>{processStatusText(message)}</span>
+        {steps.length > 0 && <span className="rs-muted">· {steps.length} {steps.length === 1 ? 'call' : 'calls'}</span>}
+      </div>
+      {trail.length > 0 ? (
         <div className="rs-trail-body">
           {trail.map((block) => (
             <div key={block.at} className="rs-trail-round">
               {block.text && <Markdown source={block.text} onLink={onLink} cite={cite} />}
-              <Steps steps={block.steps} />
+              {block.steps.length > 0 && <Steps steps={block.steps} />}
             </div>
           ))}
         </div>
-      </details>,
-    )
-  }
+      ) : (
+        <p className="rs-muted">
+          {message.status === 'queued'
+            ? 'Waiting to start.'
+            : message.status === 'working'
+              ? 'Reading the question…'
+              : 'No tool calls.'}
+        </p>
+      )}
+      {message.error && message.status !== 'done' && (
+        <p className={message.status === 'error' ? 'rs-error' : 'rs-muted'}>
+          {message.status === 'error' ? `Error: ${message.error}` : `Stopped: ${message.error}`}
+        </p>
+      )}
+    </div>
+  )
+}
+
+function body(message: AnalystMessage, answer: string, onLink: (href: string) => void, cite: CiteLookup): ReactNode[] {
+  const parts: ReactNode[] = []
   if (answer) parts.push(<Markdown key="answer" source={answer} onLink={onLink} cite={cite} />)
   if (message.status === 'queued') parts.push(<p key="queued" className="rs-muted">Waiting to start.</p>)
-  if (message.status === 'working' && steps.length === 0 && !message.text) parts.push(<p key="start" className="rs-muted">Reading the question…</p>)
+  if (message.status === 'working' && !answer) parts.push(<p key="start" className="rs-muted">Researching…</p>)
   if (message.error && message.status !== 'done') {
     parts.push(
       <p key="error" className={message.status === 'error' ? 'rs-error' : 'rs-muted'}>
@@ -120,8 +182,17 @@ function body(message: AnalystMessage, onLink: (href: string) => void, cite: Cit
  * line each: the marker, what the filing is, the quoted words, and the verdict. The markers in the
  * answer link to the same pages, so the list is there to check, not to read every time.
  */
-function Sources({ message, cite, onLink }: { message: AnalystMessage; cite: CiteLookup; onLink: (href: string) => void }): ReactElement {
-  const numbered = numberCitations(message.text)
+function Sources({
+  message,
+  numbered,
+  cite,
+  onLink,
+}: {
+  message: AnalystMessage
+  numbered: NumberedCitation[]
+  cite: CiteLookup
+  onLink: (href: string) => void
+}): ReactElement {
   const checking = message.status === 'working' || (message.status === 'done' && (message.citations ?? []).length === 0)
   const audit = message.audit
   return (
@@ -198,21 +269,6 @@ function Steps({ steps }: { steps: Step[] }): ReactElement {
   )
 }
 
-function statusText(message: AnalystMessage): string {
-  switch (message.status) {
-    case 'queued':
-      return 'queued'
-    case 'working':
-      return `working · turn ${message.turns + 1}`
-    case 'done':
-      return message.endedAt ? time(message.endedAt) : 'done'
-    case 'stopped':
-      return 'stopped'
-    case 'error':
-      return 'error'
-  }
-}
-
 /** The arguments' values, briefly: what a chip shows before it is opened. */
 function preview(args: string): string {
   try {
@@ -223,11 +279,6 @@ function preview(args: string): string {
   } catch {
     return args.length > 60 ? `${args.slice(0, 60)}…` : args
   }
-}
-
-function time(iso: string): string {
-  const date = new Date(iso)
-  return Number.isNaN(date.getTime()) ? '' : date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
 }
 
 function size(bytes: number): string {

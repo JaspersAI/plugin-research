@@ -45,9 +45,14 @@ const updateRoomSource = defineSource({
 
 const postSource = defineSource({
   description:
-    "Put the user's message into an open research room for the named analysts. room is the id in the room view's state.room; text is the user's own words, pointing at a view as they did (\"the companies in my screener\"), since the analysts read what the views on this workspace show; to is analyst ids (an analyst not yet in the room joins it). Returns at once; the answers arrive in the room. Never answer the research question yourself. With no room open yet, start one instead: place_view { view: 'research/room', state: { start: { name, analysts, tickers, ask } } }, where ask is this message and analysts is one id from research__analysts, the best fit, unless the user explicitly asked for more than one. Not for finding or filtering companies: that is the screener.",
-  input: z.object({ room: ROOM_ID, text: z.string(), to: z.array(z.string()) }),
-  run: async (args, ctx) => post(ctx, args as { room: string; text: string; to: string[] }),
+    "Put the user's message into an open research room for the named analysts. room is the id in the room view's state.room; text is the user's own question, pointing at a view as they did (\"the companies in my screener\"), never a wall of retrieved notes or instructions; context is optional supplemental data or notes you retrieved (such as web pages or presentations not on the grid) for the analysts to use without cluttering the user's chat bubble; to is analyst ids (an analyst not yet in the room joins it). Returns at once; the answers arrive in the room. Never answer the research question yourself. With no room open yet, start one instead: place_view { view: 'research/room', state: { start: { name, analysts, tickers, ask, context } } }, where ask is this message and analysts is one id from research__analysts, the best fit, unless the user explicitly asked for more than one. Not for finding or filtering companies: that is the screener.",
+  input: z.object({
+    room: ROOM_ID,
+    text: z.string(),
+    to: z.array(z.string()),
+    context: z.string().optional().describe('Optional supplemental data or notes retrieved for the analysts, kept out of the user chat bubble.'),
+  }),
+  run: async (args, ctx) => post(ctx, args as { room: string; text: string; to: string[]; context?: string }),
 })
 
 const stopSource = defineSource({
@@ -181,6 +186,7 @@ const Start = z.object({
   analysts: z.array(z.string()).describe('Analyst ids, from research__analysts: one, the best fit for the question, unless the user explicitly asked for more.'),
   tickers: z.array(z.string()).optional(),
   ask: z.string().optional().describe("The user's first question, in their words, posted to every analyst once the room exists."),
+  context: z.string().optional().describe('Optional supplemental data or notes retrieved for the analysts, kept out of the user chat bubble.'),
 })
 
 export default definePlugin({

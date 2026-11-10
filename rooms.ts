@@ -14,6 +14,7 @@ import {
   routeConnections,
   seqFile,
   shownOf,
+  splitPostText,
   threadText,
   transcript,
   type AnalystMessage,
@@ -142,9 +143,12 @@ export async function openRoom(ctx: BackendContext, id: string): Promise<RoomLiv
  * The user's message into the room, and a job for each analyst it is for. Analysts the room does not
  * have yet join it. Returns at once with who is working; the answers arrive in the room.
  */
-export async function post(ctx: BackendContext, input: { room: string; text: string; to: string[] }): Promise<string> {
+export async function post(
+  ctx: BackendContext,
+  input: { room: string; text: string; to: string[]; context?: string },
+): Promise<string> {
   const loaded = await here(ctx, input.room)
-  const text = input.text.trim()
+  const { text, context } = splitPostText(input.text, input.context)
   if (!text) throw new Error('Nothing to post.')
   const all = await analystsNow(ctx)
   const { ids: known, unmatched: unknown } = resolveAnalysts(all, input.to)
@@ -161,7 +165,15 @@ export async function post(ctx: BackendContext, input: { room: string; text: str
   const seq = nextSeq([...loaded.messages.values()])
   // The analysts read the views on the room's own workspace, which is the one the call came from.
   const workspace = loaded.room.workspace ?? (await callerWorkspace(ctx))
-  const message: UserMessage = { seq, role: 'user', text, to: known, at: new Date().toISOString(), ...(workspace ? { workspace } : {}) }
+  const message: UserMessage = {
+    seq,
+    role: 'user',
+    text,
+    to: known,
+    at: new Date().toISOString(),
+    ...(context ? { context } : {}),
+    ...(workspace ? { workspace } : {}),
+  }
   await saveMessage(ctx, loaded.room.id, message)
   const answers = new Set<number>()
   const queued: string[] = []

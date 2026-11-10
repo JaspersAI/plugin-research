@@ -22,8 +22,11 @@ import {
   allowConnection,
   inactiveResearchConnection,
   parseApiVersion,
+  processStatusText,
   researchConnection,
   routeConnections,
+  splitPostText,
+  threadStatusText,
   type AnalystMessage,
   type Message,
   type Room,
@@ -332,20 +335,24 @@ test('excerpts, thread reads, and message parts separate pre-answer tool narrati
     { at: first.length, tool: 'query_filings', args: '{"ticker":"FLWS"}', summary: '4 results', ref: 'r1', isError: false },
     { at: second.length, tool: 'fetch_chunk', args: '{"chunk_id":1021}', summary: '1,200 characters', ref: 'r2', isError: false },
   ]
-  const working = answer(2, 'credit', second, {
+  const working = answer(2, 'credit', `${second}\n\nDrafting final section.`, {
     status: 'working',
+    turns: 1,
     steps: [steps[0]!, { ...steps[1]!, summary: null }],
   })
-  assert.equal(visibleAnswer(working), 'I will now read the 10-K. [1]')
+  assert.equal(visibleAnswer(working), '')
+  assert.equal(threadStatusText(working), 'working')
+  assert.equal(processStatusText(working), 'working · turn 2')
   assert.deepEqual(messageParts(working), {
     trail: [
       { at: 0, text: first, steps: [steps[0]!] },
       { at: first.length, text: '<cite document_id="55" chunk_id="1000" quote="the annual report">I will now read the 10-K.</cite>', steps: [{ ...steps[1]!, summary: null }] },
+      { at: second.length, text: 'Drafting final section.', steps: [] },
     ],
     answer: '',
   })
   const workingOutput = outputOf(ROOM, [user(1, 'Summarize FLWS filings', ['credit']), working], [{ id: 'credit', name: 'Credit Analyst' }])
-  assert.equal(workingOutput.last[1]!.excerpt, 'I will now read the 10-K. [1]')
+  assert.equal(workingOutput.last[1]!.excerpt, '')
 
   const finished = answer(2, 'credit', `${second}\n\n${final}`, {
     steps,
@@ -538,4 +545,52 @@ test('loadApiVersion and setApiVersion persist settings.json, publish live/apiVe
   assert.deepEqual(listedAs, [{ connections: ['research/jaspers-v2'] }])
   assert.equal(promptSeen.includes('## research/jaspers-v2\nv2 guide'), true)
   assert.equal(promptSeen.includes('## research/jaspers\nv1 guide'), false)
+})
+
+test('splitPostText and post keep the user question clean while passing supplemental context to analysts in transcript and roomNews', async () => {
+  const handed = [
+    'Find access to the 2027 FLWS investor presentation and summarize it.',
+    '',
+    '(The assistant handed this to this piece of work. The user did not type what is below this line.)',
+    'Do not just pass the question blindly to Basic Analyst. Extracted slides:',
+    '- Slide 21: Historical Gross Profit Margin',
+  ].join('\n')
+  assert.deepEqual(splitPostText(handed, 'Additional filing note.'), {
+    text: 'Find access to the 2027 FLWS investor presentation and summarize it.',
+    context: 'Do not just pass the question blindly to Basic Analyst. Extracted slides:\n- Slide 21: Historical Gross Profit Margin\n\nAdditional filing note.',
+  })
+  assert.deepEqual(
+    splitPostText(
+      '(The assistant handed this to this piece of work. The user did not type what is below this line.)\nSummarize Q1 debt.',
+    ),
+    { text: 'Summarize Q1 debt.' },
+  )
+
+  const asked: UserMessage = {
+    ...user(1, 'Find access to the 2027 FLWS investor presentation and summarize it.', ['credit']),
+    context: 'Slide 21: Historical Gross Profit Margin 37.5%',
+  }
+  const tx = transcript({ messages: [asked], names: NAMES, analyst: 'credit', message: asked, answer: 2 })
+  assert.equal(tx.includes('#1 [You → Credit Analyst]: Find access to the 2027 FLWS investor presentation and summarize it.'), true)
+  assert.equal(tx.includes('Context:\nSlide 21: Historical Gross Profit Margin 37.5%'), true)
+
+  const followUp: UserMessage = {
+    ...user(3, 'Check the EBITDA reconciliation too.', ['credit']),
+    context: 'Slide 22: Adjusted EBITDA $2.9M',
+  }
+  const shown = shownOf([asked, answer(2, 'credit', '', { status: 'working' })])
+  const news = roomNews({
+    messages: [asked, answer(2, 'credit', '', { status: 'working' }), followUp],
+    names: NAMES,
+    message: asked,
+    answer: 2,
+    shown,
+  })
+  assert.equal(news?.includes('#3 [You → Credit Analyst]: Check the EBITDA reconciliation too.\nContext:\nSlide 22: Adjusted EBITDA $2.9M'), true)
+
+  // Public threadText and outputOf excerpts exclude supplemental context.
+  const thread = threadText([asked, answer(2, 'credit', 'Gross margin was 37.5%.')], NAMES, {})
+  assert.equal(thread.includes('Slide 21'), false)
+  const out = outputOf(ROOM, [asked], [{ id: 'credit', name: 'Credit Analyst' }])
+  assert.equal(out.last[0]!.excerpt, 'Find access to the 2027 FLWS investor presentation and summarize it.')
 })

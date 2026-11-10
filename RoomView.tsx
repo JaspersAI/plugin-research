@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type ReactElement } from 'react'
 import { useBridge, useData, usePanelState, usePublish, type PanelRef } from '@jaspers-ai/sdk'
 import type { Analyst } from './analysts'
-import { MessageRow } from './Message'
+import { MessageRow, ProcessRow } from './Message'
 import { parseApiVersion, type ApiVersion } from './room'
 import type { RoomLive } from './rooms'
 import './styles.css'
@@ -19,6 +19,7 @@ interface Start {
   analysts: string[]
   tickers?: string[]
   ask?: string
+  context?: string
 }
 
 interface RoomState {
@@ -83,7 +84,14 @@ function Room({ panel, initial }: { panel: PanelRef; initial: RoomState }): Reac
         setStart(undefined)
         const left = result.unmatched ?? []
         setNote(left.length > 0 ? `Left out ${left.join(', ')}: no analyst by that name.` : null)
-        if (start.ask?.trim()) await bridge.runSource('research/post', { room: id, text: start.ask, to: result.analysts ?? start.analysts })
+        if (start.ask?.trim()) {
+          await bridge.runSource('research/post', {
+            room: id,
+            text: start.ask,
+            to: result.analysts ?? start.analysts,
+            ...(start.context ? { context: start.context } : {}),
+          })
+        }
       } catch (err) {
         setFailure(`Could not start ${start.name}: ${err instanceof Error ? err.message : String(err)}`)
         setStart(undefined)
@@ -271,6 +279,7 @@ function Thread({
   const names = useMemo(() => Object.fromEntries(analysts.map((a) => [a.id, a.name])), [analysts])
   const colors = useMemo(() => Object.fromEntries(analysts.map((a) => [a.id, a.color])), [analysts])
   const [problem, setProblem] = useState<string | null>(null)
+  const [showProcess, setShowProcess] = useState(false)
   const act = (source: string, args: Record<string, unknown>): void => {
     setProblem(null)
     bridge.runSource(source, args).catch((err: unknown) => setProblem(err instanceof Error ? err.message : String(err)))
@@ -340,6 +349,14 @@ function Thread({
             Stop
           </button>
         )}
+        <button
+          type="button"
+          aria-pressed={showProcess}
+          className={`rs-btn${showProcess ? ' rs-btn-on' : ''}`}
+          onClick={() => setShowProcess((open) => !open)}
+        >
+          Process
+        </button>
         <ApiVersionSwitch version={apiVersion} onSelect={(version) => act('research/api-version', { version })} />
         <button type="button" className="rs-btn" onClick={() => act('research/reveal', { room })}>
           Show folder
@@ -355,22 +372,33 @@ function Thread({
           pinned.current = box.scrollHeight - box.scrollTop - box.clientHeight < 40
         }}
       >
-        <div ref={content} className="rs-thread">
+        <div ref={content} className={showProcess ? 'rs-process' : 'rs-thread'}>
           {live && seqs.length === 0 && (
             <p className="rs-muted rs-pad">No messages yet. Talk to the room through Jaspers: “ask Credit what the refinancing risk is”.</p>
           )}
-          {seqs.map((seq) => (
-            <MessageRow
-              key={seq}
-              room={room}
-              seq={seq}
-              names={names}
-              colors={colors}
-              onLink={(href) => void bridge.openLink(href).catch((err: unknown) => setProblem(err instanceof Error ? err.message : String(err)))}
-              onFile={(path) => act('research/open-file', { room, path })}
-              onCopy={copy}
-            />
-          ))}
+          {seqs.map((seq) =>
+            showProcess ? (
+              <ProcessRow
+                key={seq}
+                room={room}
+                seq={seq}
+                names={names}
+                colors={colors}
+                onLink={(href) => void bridge.openLink(href).catch((err: unknown) => setProblem(err instanceof Error ? err.message : String(err)))}
+              />
+            ) : (
+              <MessageRow
+                key={seq}
+                room={room}
+                seq={seq}
+                names={names}
+                colors={colors}
+                onLink={(href) => void bridge.openLink(href).catch((err: unknown) => setProblem(err instanceof Error ? err.message : String(err)))}
+                onFile={(path) => act('research/open-file', { room, path })}
+                onCopy={copy}
+              />
+            ),
+          )}
         </div>
       </div>
     </div>

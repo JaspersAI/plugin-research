@@ -40,6 +40,8 @@ export interface UserMessage {
   text: string
   to: string[]
   at: string
+  /** Supplemental context or notes passed by the room agent for the analysts, kept out of the user's chat bubble. */
+  context?: string
   /** The workspace on screen as the user posted it, whose views the analysts read. */
   workspace?: string
 }
@@ -342,32 +344,53 @@ export interface MessageParts {
   answer: string
 }
 
+const HANDED_LINE = '(The assistant handed this to this piece of work. The user did not type what is below this line.)'
+
 /**
- * The user-facing part of an analyst's message, with citation tags turned into [n] markers numbered
- * across the whole message: what follows its last tool call when it has written an answer there, or
- * the latest paragraph of its research narration while it has not.
+ * Separates the user's question from any handoff instructions or supplemental context passed with
+ * `research/post`, so the chat bubble shows only the user's question while the analysts receive the
+ * full context in their transcript.
  */
-export function visibleAnswer(message: Pick<AnalystMessage, 'text' | 'steps'>): string {
+export function splitPostText(rawText: string, rawContext?: string): { text: string; context?: string } {
+  const trimmed = rawText.trim()
+  const extra = rawContext?.trim() ?? ''
+  const index = trimmed.indexOf(HANDED_LINE)
+  if (index === -1) {
+    return extra ? { text: trimmed, context: extra } : { text: trimmed }
+  }
+  const before = trimmed.slice(0, index).trim()
+  const after = trimmed.slice(index + HANDED_LINE.length).trim()
+  if (!before) {
+    return extra ? { text: after, context: extra } : { text: after }
+  }
+  const combined = [after, extra].filter(Boolean).join('\n\n')
+  return combined ? { text: before, context: combined } : { text: before }
+}
+
+/**
+ * The user-facing final answer of an analyst's message, with citation tags turned into [n] markers
+ * numbered across the whole message: what follows its last tool call once the answer is in. While
+ * the analyst is still working or queued, pre-answer tool narration stays in Process rather than
+ * surfacing as the answer.
+ */
+export function visibleAnswer(
+  message: Pick<AnalystMessage, 'text' | 'steps'> & { status?: MessageStatus },
+): string {
+  if (message.status === 'working' || message.status === 'queued') return ''
   const text = message.text ?? ''
   const steps = Array.isArray(message.steps) ? message.steps : []
   const numbered = numberCitations(text)
   const at = steps.reduce((last, step) => Math.max(last, step.at), 0)
-  const answer = toMarkers(text.slice(at), numbered).trim()
-  if (answer) return answer
-  const parts = text
-    .slice(0, at)
-    .trim()
-    .split(/\n\n+/)
-    .map((p) => toMarkers(p, numbered).trim())
-    .filter(Boolean)
-  return parts.at(-1) ?? ''
+  return toMarkers(text.slice(at), numbered).trim()
 }
 
 /**
- * Splits an analyst message into its pre-answer research trail (each narration slice and tool-call
- * batch up to the last tool call) and the final answer written after the last tool call.
+ * Splits an analyst message into its research process trail (each narration slice and tool-call
+ * batch, plus any in-progress draft while working) and the final answer shown in the chat thread.
  */
-export function messageParts(message: Pick<AnalystMessage, 'text' | 'steps'>): MessageParts {
+export function messageParts(
+  message: Pick<AnalystMessage, 'text' | 'steps'> & { status?: MessageStatus },
+): MessageParts {
   const text = message.text ?? ''
   const steps = Array.isArray(message.steps) ? message.steps : []
   const offsets = [...new Set(steps.map((s) => s.at))].sort((a, b) => a - b)
@@ -381,10 +404,55 @@ export function messageParts(message: Pick<AnalystMessage, 'text' | 'steps'>): M
     })
     at = offset
   }
+  const tail = text.slice(at).trim()
+  if (message.status === 'working' || message.status === 'queued') {
+    if (tail) trail.push({ at, text: tail, steps: [] })
+    return { trail, answer: '' }
+  }
   return {
     trail,
-    answer: text.slice(at).trim(),
+    answer: tail,
   }
+}
+
+/** Status label shown on an analyst message in the chat thread, without technical turn counters. */
+export function threadStatusText(message: Pick<AnalystMessage, 'status' | 'endedAt'>): string {
+  switch (message.status) {
+    case 'queued':
+      return 'queued'
+    case 'working':
+      return 'working'
+    case 'done':
+      return message.endedAt ? timeOf(message.endedAt) : 'done'
+    case 'stopped':
+      return 'stopped'
+    case 'error':
+      return 'error'
+  }
+}
+
+/** Status label shown on an analyst run in the separate Process view, including turn counts. */
+export function processStatusText(message: Pick<AnalystMessage, 'status' | 'endedAt' | 'turns'>): string {
+  switch (message.status) {
+    case 'queued':
+      return 'queued'
+    case 'working':
+      return `working · turn ${message.turns + 1}`
+    case 'done': {
+      const turns = `${message.turns} turn${message.turns === 1 ? '' : 's'}`
+      const ended = message.endedAt ? timeOf(message.endedAt) : ''
+      return ended ? `${turns} · ${ended}` : turns
+    }
+    case 'stopped':
+      return 'stopped'
+    case 'error':
+      return 'error'
+  }
+}
+
+function timeOf(iso: string): string {
+  const date = new Date(iso)
+  return Number.isNaN(date.getTime()) ? '' : date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
 }
 
 /**
@@ -425,7 +493,10 @@ function userLine(message: UserMessage, names: Record<string, string>): string {
 
 /** One message as an analyst reads it: its number, who, and what it says, or where it stands when it says nothing. */
 function messageLine(message: Message, names: Record<string, string>): string {
-  if (message.role === 'user') return `#${message.seq} ${userLine(message, names)}`
+  if (message.role === 'user') {
+    const line = `#${message.seq} ${userLine(message, names)}`
+    return message.context ? `${line}\nContext:\n${message.context}` : line
+  }
   const text = (message.text ?? '').trim()
   if (!text) return `#${message.seq} [${message.name}] (${message.status}${message.error ? `: ${message.error}` : ''})`
   return `#${message.seq} [${message.name}]${statusMark(message)}: ${text}`
