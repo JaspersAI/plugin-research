@@ -391,7 +391,6 @@ function Thread({
                 key={seq}
                 room={room}
                 seq={seq}
-                names={names}
                 colors={colors}
                 onLink={(href) => void bridge.openLink(href).catch((err: unknown) => setProblem(err instanceof Error ? err.message : String(err)))}
                 onFile={(path) => act('research/open-file', { room, path })}

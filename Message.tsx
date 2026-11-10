@@ -20,12 +20,19 @@ import {
 interface Props {
   room: string
   seq: number
-  names: Record<string, string>
   colors: Record<string, string | null>
   onLink: (href: string) => void
   onFile: (path: string) => void
   /** Resolves true once the text is on the clipboard; a failure is the room's to show. */
   onCopy: (text: string) => Promise<boolean>
+}
+
+interface ProcessProps {
+  room: string
+  seq: number
+  names: Record<string, string>
+  colors: Record<string, string | null>
+  onLink: (href: string) => void
 }
 
 export function MessageRow({ room, seq, colors, onLink, onFile, onCopy }: Props): ReactElement | null {
@@ -91,7 +98,7 @@ export function ProcessRow({
   names,
   colors,
   onLink,
-}: Pick<Props, 'room' | 'seq' | 'names' | 'colors' | 'onLink'>): ReactElement | null {
+}: ProcessProps): ReactElement | null {
   const message = useData(`live/rooms/${room}/m/${seq}`) as Message | undefined
   const text = message?.role === 'analyst' ? message.text : ''
   const citations = message?.role === 'analyst' ? message.citations : undefined
@@ -137,8 +144,8 @@ export function ProcessRow({
       </div>
       {trail.length > 0 ? (
         <div className="rs-trail-body">
-          {trail.map((block) => (
-            <div key={block.at} className="rs-trail-round">
+          {trail.map((block, i) => (
+            <div key={`${block.at}-${i}`} className="rs-trail-round">
               {block.text && <Markdown source={block.text} onLink={onLink} cite={cite} />}
               {block.steps.length > 0 && <Steps steps={block.steps} />}
             </div>
